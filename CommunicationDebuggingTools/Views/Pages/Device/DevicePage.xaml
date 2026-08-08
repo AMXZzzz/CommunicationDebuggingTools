@@ -109,7 +109,7 @@
         <!-- ==================== 编辑弹窗 ==================== -->
         <Popup x:Name="editPopup"
                AllowsTransparency="True"
-               StaysOpen="False"
+               StaysOpen="True"
                Placement="Center">
             <Border Background="Transparent">
                 <device:DeviceEditPanel x:Name="editPanel"/>

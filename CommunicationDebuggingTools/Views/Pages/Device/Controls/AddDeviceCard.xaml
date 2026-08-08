@@ -6,31 +6,33 @@
              Margin="0,0,16,16"
              Cursor="Hand">
 
-    <Grid Background="Transparent">
+    <Grid Background="Transparent"
+          MouseLeftButtonUp="AddDeviceCard_MouseLeftButtonUp">
 
         <!-- ==================== 虚线边框 ==================== -->
         <!-- StrokeDashArray: 实线长度 4 + 间隔 2 -->
+        <!-- IsHitTestVisible=False：点击落到 Grid，保证事件稳定触发 -->
         <Rectangle RadiusX="6"
                    RadiusY="6"
                    StrokeThickness="1.5"
                    StrokeDashArray="4 2"
-                   Fill="Transparent">
+                   Fill="Transparent"
+                   IsHitTestVisible="False">
             <Rectangle.Style>
                 <Style TargetType="Rectangle">
                     <!-- 默认边框 -->
                     <Setter Property="Stroke" Value="{StaticResource SF.Brush.Border.Default}"/>
                     <Style.Triggers>
                         <!-- 悬停：强调色边框 -->
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
                             <Setter Property="Stroke" Value="{StaticResource SF.Brush.Accent.Default}"/>
-                        </Trigger>
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Rectangle.Style>
         </Rectangle>
 
         <!-- ==================== 中间内容 ==================== -->
-        <!-- IsHitTestVisible=False：不拦截鼠标，让虚线能收到悬停 -->
         <StackPanel HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     IsHitTestVisible="False">

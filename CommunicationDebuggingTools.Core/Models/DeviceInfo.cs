@@ -2,7 +2,8 @@
 
 namespace CommunicationDebuggingTools.Core.Models {
     /// <summary>
-    /// 设备信息（核心模型，UI / 业务 / 插件共用）
+    /// 设备信息（核心模型，UI / 业务 / 插件共用）。
+    /// 该类只承载数据，不包含任何通信/持久化逻辑，保证 Core 层不依赖具体实现。
     /// </summary>
     public class DeviceInfo {
         /// <summary>唯一标识</summary>
@@ -56,8 +57,10 @@ namespace CommunicationDebuggingTools.Core.Models {
         }
 
         /// <summary>
-        /// 是否双轨
-        /// /summary>
+        /// 是否双轨。
+        /// 依据 <see cref="Lane"/> 推导得出，赋值时会反向写回 <see cref="Lane"/>，
+        /// 方便 UI 直接绑定布尔属性（如切换按钮）。
+        /// </summary>
         public bool IsDualLane {
             get { return Lane == LaneType.Dual; }
             set { Lane = value ? LaneType.Dual : LaneType.Single; }

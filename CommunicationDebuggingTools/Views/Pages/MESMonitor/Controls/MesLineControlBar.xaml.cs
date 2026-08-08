@@ -1,30 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace CommunicationDebuggingTools.Views.Pages.MESMonitor.Controls {
     /// <summary>
-    /// MesLineControlBar.xaml 的交互逻辑
+    /// 产线控制栏控件（MesLineControlBar.xaml 的交互逻辑）。
+    /// 包含告警入口，点击后通过 AlarmClickedEvent 通知宿主弹出告警列表面板。
     /// </summary>
     public partial class MesLineControlBar : UserControl {
         public MesLineControlBar () {
             InitializeComponent();
         }
 
-
+        /// <summary>点击告警入口时触发，用于通知宿主弹出告警列表。</summary>
         public event Action AlarmClickedEvent;
 
+        /// <summary>告警图标区域点击：转发 AlarmClickedEvent 事件。</summary>
         private void AlarmPanel_Click (object sender, MouseButtonEventArgs e) {
             AlarmClickedEvent?.Invoke();
         }

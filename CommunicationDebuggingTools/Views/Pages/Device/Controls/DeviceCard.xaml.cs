@@ -13,6 +13,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         /// <summary>点击「编辑」时通知外部</summary>
         public event Action EditClicked;
 
+        /// <summary>设备数据依赖属性：值变化时自动刷新卡片上的各项显示内容。</summary>
         public static readonly DependencyProperty DeviceProperty =
             DependencyProperty.Register(
                 "Device",
@@ -20,11 +21,13 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 typeof(DeviceCard),
                 new PropertyMetadata(null, OnDeviceChanged));
 
+        /// <summary>绑定到此卡片的设备数据。</summary>
         public DeviceInfo Device {
             get { return (DeviceInfo)GetValue(DeviceProperty); }
             set { SetValue(DeviceProperty, value); }
         }
 
+        /// <summary>构造卡片并为“编辑”按钮注册点击事件，转发为 EditClicked 事件通知外部订阅者。</summary>
         public DeviceCard () {
             InitializeComponent();
 
@@ -35,6 +38,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 };
         }
 
+        /// <summary>依赖属性回调：转发到实例方法 ApplyDevice 处理。</summary>
         private static void OnDeviceChanged (DependencyObject d, DependencyPropertyChangedEventArgs e) {
             var card = (DeviceCard)d;
             card.ApplyDevice(e.NewValue as DeviceInfo);
@@ -58,6 +62,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             ApplyStatusVisual(info.StatusType);
         }
 
+        /// <summary>根据设备状态枚举映射为展示文本与颜色主题 Key，统一入口为 SetStatus。</summary>
         private void ApplyStatusVisual (DeviceStatusType type) {
             string statusText;
             string statusKey;

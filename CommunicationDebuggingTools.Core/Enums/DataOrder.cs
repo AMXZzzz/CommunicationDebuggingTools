@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CommunicationDebuggingTools.Core.Enums {
+﻿namespace CommunicationDebuggingTools.Core.Enums {
     /// <summary>
     /// 寄存器内字节序（一个 16 位字里两个字节的顺序）
     /// </summary>

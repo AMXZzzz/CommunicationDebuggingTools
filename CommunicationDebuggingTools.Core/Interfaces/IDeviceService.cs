@@ -1,30 +1,60 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Core.Interfaces {
     /// <summary>
-    /// 设备业务服务：UI 只依赖此接口
+    /// 设备业务服务契约：UI 层只依赖此接口，不直接接触持久化与协议实现细节。
+    /// 负责设备列表的增删改查、持久化读写以及连接/断开协议的调度。
     /// </summary>
     public interface IDeviceService {
+        /// <summary>
+        /// 当前已加载的设备集合（可直接绑定到 UI，增删改时自动通知界面刷新）。
+        /// </summary>
         ObservableCollection<DeviceInfo> Devices { get; }
 
+        /// <summary>
+        /// 从持久化存储重新加载设备列表到 <see cref="Devices"/>。
+        /// </summary>
         void Load ();
+
+        /// <summary>
+        /// 将当前 <see cref="Devices"/> 列表持久化到存储。
+        /// </summary>
         void Save ();
 
+        /// <summary>
+        /// 新增一个设备，并自动持久化。
+        /// </summary>
+        /// <param name="device">新设备信息。</param>
         void Add (DeviceInfo device);
+
+        /// <summary>
+        /// 根据 <see cref="DeviceInfo.Id"/> 更新已有设备的配置，并自动持久化。
+        /// </summary>
+        /// <param name="device">包含新值的设备信息。</param>
         void Update (DeviceInfo device);
+
+        /// <summary>
+        /// 根据设备 Id 删除对应设备，并自动持久化。
+        /// </summary>
+        /// <param name="id">设备唯一标识。</param>
         void Remove (string id);
 
+        /// <summary>
+        /// 建立与指定设备的通信连接（具体协议由对应插件实现）。
+        /// </summary>
+        /// <param name="id">设备唯一标识。</param>
+        /// <returns>连接是否成功。</returns>
         bool Connect (string id);
+
+        /// <summary>
+        /// 断开与指定设备的通信连接。
+        /// </summary>
+        /// <param name="id">设备唯一标识。</param>
         void Disconnect (string id);
 
-        /// <summary>获取该设备当前协议实例（未连接可为 null）</summary>
+        /// <summary>获取该设备当前协议实例（未连接可为 null）。</summary>
+        /// <param name="deviceId">设备唯一标识。</param>
         IProtocol GetProtocol (string deviceId);
     }
 }
