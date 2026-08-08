@@ -1,0 +1,39 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    
+    
+    <!-- 导航栏展开收缩大小 -->
+    <sys:Double x:Key="SF.ControlsSize.NavBarExpanded">120</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.NavBarCollapsed">40</sys:Double>
+
+    <!-- PLC卡片字体大小 -->
+    <sys:Double x:Key="SF.FontSize.DeviceNameFontSize">15</sys:Double>
+    <sys:Double x:Key="SF.FontSize.PlcModelNameFontSize">12</sys:Double>
+    <sys:Double x:Key="SF.FontSize.DetailsPanelShowFontSize">12</sys:Double>
+
+
+    <!-- 主窗口 -->
+    <sys:Double x:Key="SF.ControlsSize.MainWindowsWidth">1280</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.MainWindowsHeight">900</sys:Double>
+
+    <!-- 侧边栏宽度 -->
+    <sys:Double x:Key="SF.ControlsSize.SidebarExpanded">120</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.SidebarCollapsed">40</sys:Double>
+
+    <!-- 按钮尺寸 -->
+    <sys:Double x:Key="SF.ControlsSize.ButtonWidth">80</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.ButtonHeight">32</sys:Double>
+
+    <!-- PLC卡片尺寸 -->
+    <sys:Double x:Key="SF.ControlsSize.PLCBarHeight">200</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.PLCBarWidth">320</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.AccentBarHeight">32</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.AccentBarWidth">4</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.PlcStatusLightHeight">10</sys:Double>
+    <sys:Double x:Key="SF.ControlsSize.PlcStatusLightWidth">10</sys:Double>
+
+    <!-- 按钮边框厚度 -->
+    <Thickness  x:Key="SF.ControlsSize.ButtonBorderThickness">0</Thickness>
+    
+</ResourceDictionary>
