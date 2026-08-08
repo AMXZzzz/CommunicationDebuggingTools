@@ -56,7 +56,7 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="Services\MyAppServices.cs" />
-    <Compile Include="Views\Controls\NavSidebar.xaml.cs">
+    <Compile Include="Views\NavSidebar.xaml.cs">
       <DependentUpon>NavSidebar.xaml</DependentUpon>
     </Compile>
     <Compile Include="Views\Pages\Device\AddDeviceMarker.cs" />
@@ -139,7 +139,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Views\Controls\NavSidebar.xaml">
+    <Page Include="Views\NavSidebar.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -230,7 +230,6 @@
     <Folder Include="Assets\" />
     <Folder Include="Controls\" />
     <Folder Include="Languages\" />
-    <Folder Include="ViewModels\" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CommunicationDebuggingTools.Business\CommunicationDebuggingTools.Business.csproj">
