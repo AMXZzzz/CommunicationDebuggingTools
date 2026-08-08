@@ -41,8 +41,21 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
             if (btnPrimary != null)
                 btnPrimary.Click += BtnPrimary_Click;
+
+            Unloaded += DeviceCard_Unloaded;
         }
 
+        /// <summary>
+        /// 卡片从可视树移除时取消对 DeviceInfo 的订阅，避免旧卡片被属性通知拖住。
+        /// </summary>
+        private void DeviceCard_Unloaded (object sender, RoutedEventArgs e) {
+            if (_subscribed != null) {
+                _subscribed.PropertyChanged -= Device_PropertyChanged;
+                _subscribed = null;
+            }
+
+            Unloaded -= DeviceCard_Unloaded;
+        }
         /// <summary>
         /// Device 依赖属性变更：设置 DataContext 供 {Binding}，并订阅状态通知。
         /// </summary>

@@ -121,19 +121,27 @@ namespace CommunicationDebuggingTools.Business.Device {
             if (old == null)
                 throw new InvalidOperationException("设备不存在: " + device.Id);
 
-            // 已连接时改 IP/协议：先断开再更新
-            if (old.IsConnected &&
-                (old.Ip != device.Ip || old.Port != device.Port ||
-                 old.Protocol != device.Protocol || old.UnitId != device.UnitId)) {
+            // 连接参数变了且仍在连接 → 先断
+            bool connChanged =  old.Ip != device.Ip ||
+                                old.Port != device.Port ||
+                                old.Protocol != device.Protocol ||
+                                old.UnitId != device.UnitId;
+
+            if (old.IsConnected && connChanged) {
                 Disconnect(old.Id);
-                device.IsConnected = false;
-                device.StatusType = DeviceStatusType.Offline;
-            } else {
-                device.IsConnected = old.IsConnected;
+                // Disconnect 已把 old 标成离线
             }
 
-            int index = Devices.IndexOf(old);
-            Devices[index] = device;
+            // 写回同一实例（触发 INPC，卡片自动刷新）
+            old.Name = device.Name;
+            old.Model = device.Model;
+            old.Protocol = device.Protocol;
+            old.Ip = device.Ip;
+            old.Port = device.Port;
+            old.UnitId = device.UnitId;
+            old.Lane = device.Lane;
+            // 不要用 device 替换 old；不要改 Id
+
             Save();
         }
 
@@ -168,22 +176,20 @@ namespace CommunicationDebuggingTools.Business.Device {
         public async Task<bool> ConnectAsync (string id, CancellationToken cancellationToken) {
             DeviceInfo device = FindRequired(id);
 
-            //! 已连接的设备无需重复连接，直接返回 true。
             if (device.IsConnected)
                 return true;
 
-            //! 测试 TCP 端口是否可达，避免在网络不可达时直接调用协议连接方法导致长时间阻塞。
-            bool reachable = await TcpProbe
-                        .IsPortOpenAsync(device.Ip, device.Port, 1000, cancellationToken)
-                        .ConfigureAwait(false);
+            // 先标连接中（调用方在 UI 线程时，这里也是 UI 线程）
+            device.StatusType = DeviceStatusType.Connecting;
+
+            bool reachable = await TcpProbe.IsPortOpenAsync(device.Ip, device.Port, 1000, cancellationToken);
+
 
             if (!reachable) {
                 device.IsConnected = false;
-                device.StatusType = DeviceStatusType.Offline;  // 未连通 → 离线
+                device.StatusType = DeviceStatusType.Offline;
                 return false;
             }
-
-            device.StatusType = DeviceStatusType.Connecting;
 
             IProtocol protocol = _resolver.Resolve(device.Protocol);
             if (protocol == null) {
@@ -194,8 +200,8 @@ namespace CommunicationDebuggingTools.Business.Device {
 
             try {
                 bool ok = await protocol
-            .ConnectAsync(device.Ip, device.Port, device.UnitId, cancellationToken)
-            .ConfigureAwait(false);
+            .ConnectAsync(device.Ip, device.Port, device.UnitId, cancellationToken);
+                // 不要 ConfigureAwait(false)
 
                 if (ok) {
                     _sessions[id] = protocol;
