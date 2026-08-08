@@ -62,12 +62,11 @@
         </ScrollViewer>
 
         <!-- ===== 活动报警 Popup（列表 + 详情） ===== -->
-        <!-- ===== 活动报警 Popup（列表 + 详情） ===== -->
         <Popup x:Name="alarmPopup"
-       AllowsTransparency="True"
-       StaysOpen="False"
-       PopupAnimation="Fade"
-       Placement="Center">
+               AllowsTransparency="True"
+               StaysOpen="False"
+               PopupAnimation="Fade"
+               Placement="Center">
             <Border Background="Transparent">
                 <Grid>
                     <!-- 列表 -->
@@ -75,8 +74,7 @@
 
                     <!-- 详情（默认隐藏） -->
                     <mes:MesAlarmDetail x:Name="alarmDetail"
-                                        Visibility="Collapsed"
-                                      />
+                                        Visibility="Collapsed" />
                 </Grid>
             </Border>
         </Popup>

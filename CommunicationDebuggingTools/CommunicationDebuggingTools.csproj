@@ -56,6 +56,9 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="Services\MyAppServices.cs" />
+    <Compile Include="Views\Controls\NavSidebar.xaml.cs">
+      <DependentUpon>NavSidebar.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\Pages\Device\AddDeviceMarker.cs" />
     <Compile Include="Views\Pages\Device\Controls\AddDeviceCard.xaml.cs">
       <DependentUpon>AddDeviceCard.xaml</DependentUpon>
@@ -99,6 +102,7 @@
     <Compile Include="Views\Pages\Settings\SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Views\Tools\VisualTreeExtensions.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -132,6 +136,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Resources\Styles\ScrollBar.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Controls\NavSidebar.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -222,7 +230,6 @@
     <Folder Include="Assets\" />
     <Folder Include="Controls\" />
     <Folder Include="Languages\" />
-    <Folder Include="Models\" />
     <Folder Include="ViewModels\" />
   </ItemGroup>
   <ItemGroup>
@@ -236,4 +243,8 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>if not exist "$(TargetDir)plugins" mkdir "$(TargetDir)plugins"
+xcopy /Y /D "$(SolutionDir)Plugin.ModbusTcp\bin\$(ConfigurationName)\Plugin.ModbusTcp.dll" "$(TargetDir)plugins\"</PreBuildEvent>
+  </PropertyGroup>
 </Project>

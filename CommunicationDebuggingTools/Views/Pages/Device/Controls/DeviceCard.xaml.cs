@@ -1,19 +1,25 @@
 ﻿using System;
+using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Services;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
-    /// PLC 设备卡片
+    /// PLC 设备卡片。
+    /// 通过依赖属性 <see cref="Device"/> 接收数据；文本类字段由 XAML 绑定，
+    /// 状态灯 / 主按钮样式由 <see cref="ApplyStatusVisual"/> 根据 StatusType 更新。
     /// </summary>
     public partial class DeviceCard : UserControl {
-        /// <summary>点击「编辑」时通知外部</summary>
-        public event Action EditClicked;
+        /// <summary>当前订阅了 PropertyChanged 的设备（用于取消旧订阅）。</summary>
+        private DeviceInfo _subscribed;
 
-        /// <summary>设备数据依赖属性：值变化时自动刷新卡片上的各项显示内容。</summary>
+        /// <summary>绑定到卡片的设备数据。</summary>
         public static readonly DependencyProperty DeviceProperty =
             DependencyProperty.Register(
                 "Device",
@@ -21,80 +27,95 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 typeof(DeviceCard),
                 new PropertyMetadata(null, OnDeviceChanged));
 
-        /// <summary>绑定到此卡片的设备数据。</summary>
+        /// <summary>当前设备；与 DataContext 同步，供按钮事件使用。</summary>
         public DeviceInfo Device {
             get { return (DeviceInfo)GetValue(DeviceProperty); }
             set { SetValue(DeviceProperty, value); }
         }
 
-        /// <summary>构造卡片并为“编辑”按钮注册点击事件，转发为 EditClicked 事件通知外部订阅者。</summary>
         public DeviceCard () {
             InitializeComponent();
 
             if (btnEdit != null)
-                btnEdit.Click += (s, e) => {
-                    if (EditClicked != null)
-                        EditClicked();
-                };
+                btnEdit.Click += BtnEdit_Click;
+
+            if (btnPrimary != null)
+                btnPrimary.Click += BtnPrimary_Click;
         }
 
-        /// <summary>依赖属性回调：转发到实例方法 ApplyDevice 处理。</summary>
+        /// <summary>
+        /// Device 依赖属性变更：设置 DataContext 供 {Binding}，并订阅状态通知。
+        /// </summary>
         private static void OnDeviceChanged (DependencyObject d, DependencyPropertyChangedEventArgs e) {
             var card = (DeviceCard)d;
+            card.DataContext = e.NewValue;
             card.ApplyDevice(e.NewValue as DeviceInfo);
         }
 
         /// <summary>
-        /// 根据 DeviceInfo 刷新界面
+        /// 切换数据源：取消旧订阅、订阅新设备，并刷新状态外观。
         /// </summary>
         private void ApplyDevice (DeviceInfo info) {
-            if (info == null)
-                return;
+            if (_subscribed != null)
+                _subscribed.PropertyChanged -= Device_PropertyChanged;
 
-            SetDeviceName(info.Name ?? "");
-            SetPlcModelName(info.Model ?? "");
+            _subscribed = info;
 
-            if (ipAddress != null)
-                ipAddress.Text = info.Ip ?? "";
-            if (protocolName != null)
-                protocolName.Text = info.Protocol ?? "";
-
-            ApplyStatusVisual(info.StatusType);
+            if (info != null) {
+                info.PropertyChanged += Device_PropertyChanged;
+                ApplyStatusVisual(info.StatusType);
+            }
         }
 
-        /// <summary>根据设备状态枚举映射为展示文本与颜色主题 Key，统一入口为 SetStatus。</summary>
+        /// <summary>
+        /// 设备属性变化时，仅在状态相关字段变化时更新灯与主按钮。
+        /// Name/Ip 等已由绑定自动刷新，无需整卡重绑。
+        /// </summary>
+        private void Device_PropertyChanged (object sender, PropertyChangedEventArgs e) {
+            if (e.PropertyName == "StatusType" ||
+                e.PropertyName == "StatusText" ||
+                e.PropertyName == "IsConnected") {
+                if (Device != null)
+                    ApplyStatusVisual(Device.StatusType);
+            }
+        }
+
+        /// <summary>强制按当前 Device 刷新状态外观（一般可依赖 PropertyChanged）。</summary>
+        public void RefreshFromDevice () {
+            ApplyDevice(Device);
+        }
+
+        /// <summary>
+        /// 将 StatusType 映射为文案 Key，再交给 SetStatus 更新灯、色条、主按钮。
+        /// </summary>
         private void ApplyStatusVisual (DeviceStatusType type) {
-            string statusText;
             string statusKey;
 
             switch (type) {
                 case DeviceStatusType.Success:
-                    statusText = "RUN";
                     statusKey = "Success";
                     break;
                 case DeviceStatusType.Connecting:
-                    statusText = "连接中...";
                     statusKey = "Warning";
                     break;
                 case DeviceStatusType.Warning:
-                    statusText = "警告";
                     statusKey = "Warning";
                     break;
                 case DeviceStatusType.Error:
-                    statusText = "ALARM";
                     statusKey = "Error";
                     break;
                 default:
-                    statusText = "离线";
                     statusKey = "Offline";
                     break;
             }
 
+            // 文案以绑定 StatusText 为准；这里再写一次保证未绑定时也有显示
+            string statusText = Device != null ? Device.StatusText : "离线";
             SetStatus(statusText, statusKey);
         }
 
         /// <summary>
-        /// 设置状态文字、指示灯、主按钮样式
+        /// 更新状态文字颜色、状态灯、左侧色条、主按钮 Content/Style。
         /// </summary>
         public void SetStatus (string statusText, string statusType) {
             if (plcCurrentState != null)
@@ -106,9 +127,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                     brush = (Brush)FindResource("SF.Brush.Status.Success");
                     if (btnPrimary != null) {
                         btnPrimary.Content = "断开";
-                        btnPrimary.Style = (Style)FindResource("SF.Style.DisconnectButton");
+                        btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
                     }
                     break;
+
                 case "Warning":
                     brush = (Brush)FindResource("SF.Brush.Status.Warning");
                     if (btnPrimary != null) {
@@ -116,6 +138,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                         btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
                     }
                     break;
+
                 case "Error":
                     brush = (Brush)FindResource("SF.Brush.Status.Error");
                     if (btnPrimary != null) {
@@ -123,6 +146,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                         btnPrimary.Style = (Style)FindResource("SF.Style.PrimaryButton");
                     }
                     break;
+
                 default:
                     brush = (Brush)FindResource("SF.Brush.Text.Secondary");
                     if (btnPrimary != null) {
@@ -140,14 +164,72 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 AccentBar.Background = brush;
         }
 
-        public void SetDeviceName (string deviceName) {
-            if (devicenName != null)
-                devicenName.Text = deviceName ?? "";
+        /// <summary>打开编辑弹窗。</summary>
+        private void BtnEdit_Click (object sender, RoutedEventArgs e) {
+            DeviceInfo info = Device;
+            if (info == null)
+                return;
+
+            DevicePage page = FindParentPage(this);
+            if (page != null)
+                page.OpenEditDevice(info);
         }
 
-        public void SetPlcModelName (string deviceType) {
-            if (plcModelName != null)
-                plcModelName.Text = deviceType ?? "";
+        /// <summary>
+        /// 连接 / 断开 / 重连。
+        /// 连接使用 ConnectAsync，不阻塞 UI；状态变化通过 PropertyChanged 刷新外观。
+        /// </summary>
+        private async void BtnPrimary_Click (object sender, RoutedEventArgs e) {
+            DeviceInfo info = Device;
+            if (info == null || string.IsNullOrEmpty(info.Id))
+                return;
+
+            // 已连接或连接中 → 断开
+            if (info.IsConnected || info.StatusType == DeviceStatusType.Connecting) {
+                MyAppServices.Devices.Disconnect(info.Id);
+                return;
+            }
+
+            // 先进入连接中（触发绑定与本卡订阅）
+            info.StatusType = DeviceStatusType.Connecting;
+            info.IsConnected = false;
+
+            if (btnPrimary != null)
+                btnPrimary.IsEnabled = false;
+
+            string id = info.Id;
+
+            try {
+                await MyAppServices.Devices.ConnectAsync(id, CancellationToken.None);
+            } catch {
+                if (Device != null && Device.Id == id) {
+                    Device.IsConnected = false;
+                    Device.StatusType = DeviceStatusType.Error;
+                }
+            } finally {
+                if (btnPrimary != null)
+                    btnPrimary.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 沿可视化树向上查找所属 <see cref="DevicePage"/>。
+        /// </summary>
+        private static DevicePage FindParentPage (DependencyObject d) {
+            while (d != null) {
+                DevicePage page = d as DevicePage;
+                if (page != null)
+                    return page;
+
+                DependencyObject parent = VisualTreeHelper.GetParent(d);
+                if (parent == null) {
+                    FrameworkElement fe = d as FrameworkElement;
+                    if (fe != null)
+                        parent = fe.Parent as DependencyObject;
+                }
+                d = parent;
+            }
+            return null;
         }
     }
 }

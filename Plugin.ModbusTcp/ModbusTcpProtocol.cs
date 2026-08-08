@@ -1,8 +1,10 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Interfaces;
+using System;
 using System.Net.Sockets;
 using System.Text;
-using CommunicationDebuggingTools.Core.Enums;
-using CommunicationDebuggingTools.Core.Interfaces;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Plugin.ModbusTcp {
     /// <summary>
@@ -53,7 +55,7 @@ namespace Plugin.ModbusTcp {
         /// <param name="port">从站端口（Modbus TCP 默认 502）。</param>
         /// <param name="unitId">从站地址（Unit Id），会被截断到 0~255 范围。</param>
         /// <returns>是否连接成功。</returns>
-        public bool Connect (string ip, int port, int unitId) {
+        public async Task<bool> ConnectAsync (string ip, int port, int unitId, CancellationToken cancellationToken) {
             Disconnect();
 
             if (string.IsNullOrWhiteSpace(ip))
@@ -63,13 +65,23 @@ namespace Plugin.ModbusTcp {
 
             try {
                 _tcp = new TcpClient();
-                IAsyncResult ar = _tcp.BeginConnect(ip, port, null, null);
-                bool ok = ar.AsyncWaitHandle.WaitOne(_timeoutMs);
-                if (!ok || !_tcp.Connected) {
+
+                Task connectTask = _tcp.ConnectAsync(ip, port);
+                Task timeoutTask = Task.Delay(_timeoutMs, cancellationToken);
+
+                Task finished = await Task.WhenAny(connectTask, timeoutTask).ConfigureAwait(false);
+
+                if (finished != connectTask) {
                     Disconnect();
                     return false;
                 }
-                _tcp.EndConnect(ar);
+
+                await connectTask.ConfigureAwait(false);
+
+                if (!_tcp.Connected || cancellationToken.IsCancellationRequested) {
+                    Disconnect();
+                    return false;
+                }
 
                 _stream = _tcp.GetStream();
                 _stream.ReadTimeout = _timeoutMs;

@@ -8,43 +8,43 @@
       Background="{StaticResource SF.Brush.Bg.App}"
       Title="DevicePage">
 
-    <Grid Margin="16">
+    <Grid>
         <Grid.RowDefinitions>
-            <!-- 工具栏 -->
             <RowDefinition Height="Auto"/>
-            <!-- 统计 -->
             <RowDefinition Height="Auto"/>
-            <!-- 设备列表（含末尾添加卡） -->
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- ==================== 工具栏 ==================== -->
         <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
-                    Margin="0 0 0 12">
+                    Margin="16,16,16,12">
             <Button Content="一键连接"
-                    Style="{StaticResource SF.Style.PrimaryButton}"/>
+                    Style="{StaticResource SF.Style.PrimaryButton}"
+                    Click="BtnConnectAll_Click"/>
             <Button Content="一键断开"
-                    Style="{StaticResource SF.Style.DangerButton}"/>
+                    Style="{StaticResource SF.Style.DangerButton}"
+                    Click="BtnDisconnectAll_Click"/>
             <Button Content="刷新"
-                    Style="{StaticResource SF.Style.DarkButton}"/>
+                    Style="{StaticResource SF.Style.DarkButton}"
+                    Click="BtnRefresh_Click"/>
             <Button Content="删除"
-                    Style="{StaticResource SF.Style.DangerButton}"/>
+                    Style="{StaticResource SF.Style.DangerButton}"
+                    Click="BtnDeleteSelected_Click"/>
         </StackPanel>
 
-        <!-- ==================== 统计信息 ==================== -->
+        <!-- ==================== 统计 ==================== -->
         <StackPanel Grid.Row="1"
                     Orientation="Horizontal"
-                    Margin="0 0 0 16">
+                    Margin="16,0,16,16">
             <TextBlock Text="设备总数: "
                        FontSize="14"
                        Foreground="{StaticResource SF.Brush.Text.Secondary}"
                        VerticalAlignment="Center"/>
-            <!-- 数量徽章（代码里刷新，不含添加卡） -->
             <Border Background="{StaticResource SF.Brush.Bg.Hover}"
                     CornerRadius="10"
-                    Padding="8 2"
-                    Margin="8 0 0 0"
+                    Padding="8,2"
+                    Margin="8,0,0,0"
                     VerticalAlignment="Center">
                 <TextBlock x:Name="deviceCountText"
                            Text="0"
@@ -55,61 +55,58 @@
 
         <!-- ==================== 设备列表 ==================== -->
         <ScrollViewer x:Name="deviceScroll"
-              Grid.Row="2"
-              Focusable="False"
-              FocusVisualStyle="{x:Null}"
-              VerticalScrollBarVisibility="Auto"
-              HorizontalScrollBarVisibility="Disabled">
-
-            <!-- 宽度跟 ScrollViewer 视口一致，WrapPanel 才能横向换行 -->
+                      Grid.Row="2"
+                      Margin="16,0,16,16"
+                      Focusable="False"
+                      FocusVisualStyle="{x:Null}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
             <ItemsControl x:Name="deviceList"
-                  Focusable="False"
-                  FocusVisualStyle="{x:Null}"
-                  HorizontalAlignment="Left"
-                  Width="{Binding ViewportWidth, ElementName=deviceScroll}">
-                
-                <!-- 数据模板 -->
+                          Focusable="False"
+                          FocusVisualStyle="{x:Null}"
+                          HorizontalAlignment="Left"
+                          Width="{Binding ViewportWidth, ElementName=deviceScroll}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel Orientation="Horizontal"
-                           HorizontalAlignment="Left"/>
+                                   HorizontalAlignment="Left"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                
-                <!-- 容器样式 -->
                 <ItemsControl.ItemContainerStyle>
                     <Style TargetType="ContentPresenter">
                         <Setter Property="Focusable" Value="False"/>
                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                     </Style>
                 </ItemsControl.ItemContainerStyle>
-                
-                <!-- 卡片资源 -->
                 <ItemsControl.Resources>
-                    <!-- 设备卡片 -->
                     <DataTemplate DataType="{x:Type models:DeviceInfo}">
                         <device:DeviceCard Device="{Binding}"
-                                  Margin="0 0 16 16"
-                                  HorizontalAlignment="Left"
-                                  VerticalAlignment="Top"/>
+                                          Margin="0,0,16,16"
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Top"/>
                     </DataTemplate>
-                    
-                    <!-- 添加设备卡片 -->
                     <DataTemplate DataType="{x:Type device:AddDeviceMarker}">
-                        <device:AddDeviceCard Margin="0 0 16 16"
-                                     HorizontalAlignment="Left"
-                                     VerticalAlignment="Top"/>
+                        <device:AddDeviceCard Margin="0,0,16,16"
+                                             HorizontalAlignment="Left"
+                                             VerticalAlignment="Top"/>
                     </DataTemplate>
                 </ItemsControl.Resources>
-                
-                
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- ==================== 编辑弹窗 ==================== -->
+        <!-- ==================== 模态遮罩（与报警一致：挡住页面其它区域） ==================== -->
+        <Border x:Name="editMask"
+                Grid.Row="0"
+                Grid.RowSpan="3"
+                Background="#99000000"
+                Visibility="Collapsed"
+                IsHitTestVisible="True"/>
+
+        <!-- ==================== 编辑 Popup（结构对齐 alarmPopup） ==================== -->
         <Popup x:Name="editPopup"
                AllowsTransparency="True"
                StaysOpen="True"
+               PopupAnimation="Fade"
                Placement="Center">
             <Border Background="Transparent">
                 <device:DeviceEditPanel x:Name="editPanel"/>

@@ -1,5 +1,7 @@
-﻿using System.Text;
-using CommunicationDebuggingTools.Core.Enums;
+﻿using CommunicationDebuggingTools.Core.Enums;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CommunicationDebuggingTools.Core.Interfaces {
     /// <summary>
@@ -19,8 +21,9 @@ namespace CommunicationDebuggingTools.Core.Interfaces {
         /// <param name="ip">设备 IP 地址。</param>
         /// <param name="port">通信端口。</param>
         /// <param name="unitId">站号 / Unit ID（Modbus 为从站地址）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>连接是否成功。</returns>
-        bool Connect (string ip, int port, int unitId);
+        Task<bool> ConnectAsync (string ip, int port, int unitId, CancellationToken cancellationToken);
 
         /// <summary>断开当前连接并释放相关资源。</summary>
         void Disconnect ();

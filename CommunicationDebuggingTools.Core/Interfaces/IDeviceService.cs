@@ -1,5 +1,7 @@
-﻿using System.Collections.ObjectModel;
-using CommunicationDebuggingTools.Core.Models;
+﻿using CommunicationDebuggingTools.Core.Models;
+using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CommunicationDebuggingTools.Core.Interfaces {
     /// <summary>
@@ -44,8 +46,9 @@ namespace CommunicationDebuggingTools.Core.Interfaces {
         /// 建立与指定设备的通信连接（具体协议由对应插件实现）。
         /// </summary>
         /// <param name="id">设备唯一标识。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>连接是否成功。</returns>
-        bool Connect (string id);
+        Task<bool> ConnectAsync (string id, CancellationToken cancellationToken);
 
         /// <summary>
         /// 断开与指定设备的通信连接。

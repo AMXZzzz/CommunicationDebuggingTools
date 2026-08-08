@@ -1,10 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
+﻿using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using CommunicationDebuggingTools.Business.Tools;
 
 namespace CommunicationDebuggingTools.Business.Device {
     /// <summary>
@@ -153,33 +157,46 @@ namespace CommunicationDebuggingTools.Business.Device {
         }
 
         /// <summary>
-        /// 建立与指定设备的通信连接。
-        /// 流程：根据设备的 Protocol 名称向解析器解析出协议实例，再调用协议的 Connect 方法真正建立连接；
-        /// 连接过程中的异常会被捕获并转换为失败结果，不会向上抛出，避免单个设备连接异常导致整个 UI 崩溃。
-        /// 若设备已处于连接状态，直接返回 true（幂等）。
+        /// 异步连接指定设备。
+        /// 已连接时直接返回 true；连接失败或异常时更新设备状态并返回 false，不向上抛出异常。
         /// </summary>
         /// <param name="id">设备唯一标识。</param>
-        /// <returns>连接是否成功。</returns>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>是否连接成功。</returns>
         /// <exception cref="ArgumentException">id 为空时抛出。</exception>
         /// <exception cref="InvalidOperationException">设备不存在时抛出。</exception>
-        public bool Connect (string id) {
+        public async Task<bool> ConnectAsync (string id, CancellationToken cancellationToken) {
             DeviceInfo device = FindRequired(id);
 
+            //! 已连接的设备无需重复连接，直接返回 true。
             if (device.IsConnected)
                 return true;
+
+            //! 测试 TCP 端口是否可达，避免在网络不可达时直接调用协议连接方法导致长时间阻塞。
+            bool reachable = await TcpProbe
+                        .IsPortOpenAsync(device.Ip, device.Port, 1000, cancellationToken)
+                        .ConfigureAwait(false);
+
+            if (!reachable) {
+                device.IsConnected = false;
+                device.StatusType = DeviceStatusType.Offline;  // 未连通 → 离线
+                return false;
+            }
 
             device.StatusType = DeviceStatusType.Connecting;
 
             IProtocol protocol = _resolver.Resolve(device.Protocol);
             if (protocol == null) {
-                // 找不到对应协议插件（如插件未部署/名称拼写不一致）
-                device.StatusType = DeviceStatusType.Error;
                 device.IsConnected = false;
+                device.StatusType = DeviceStatusType.Error;
                 return false;
             }
 
             try {
-                bool ok = protocol.Connect(device.Ip, device.Port, device.UnitId);
+                bool ok = await protocol
+            .ConnectAsync(device.Ip, device.Port, device.UnitId, cancellationToken)
+            .ConfigureAwait(false);
+
                 if (ok) {
                     _sessions[id] = protocol;
                     device.IsConnected = true;
@@ -190,8 +207,12 @@ namespace CommunicationDebuggingTools.Business.Device {
                     device.StatusType = DeviceStatusType.Error;
                 }
                 return ok;
+            } catch (OperationCanceledException) {
+                SafeDisconnectProtocol(protocol);
+                device.IsConnected = false;
+                device.StatusType = DeviceStatusType.Offline;
+                return false;
             } catch {
-                // 网络异常等不可预期错误：按连接失败处理，同时确保底层资源已释放
                 SafeDisconnectProtocol(protocol);
                 device.IsConnected = false;
                 device.StatusType = DeviceStatusType.Error;

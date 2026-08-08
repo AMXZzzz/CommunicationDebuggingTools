@@ -1,42 +1,60 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-
-    <!-- 导航指示条展开 -->
+    <!-- ==================== 导航指示条展开 ==================== -->
     <Storyboard x:Key="SF.Anim.NavIndicatorExpand">
-        <!-- 目标 -->
         <DoubleAnimation Storyboard.TargetName="Indicator"
-                    Storyboard.TargetProperty="Height"
-                    To="16"
-                    Duration="0:0:0.35">
-            <!-- 动画效果 -->
+                         Storyboard.TargetProperty="Height"
+                         To="16"
+                         Duration="0:0:0.35">
             <DoubleAnimation.EasingFunction>
                 <QuadraticEase EasingMode="EaseOut"/>
             </DoubleAnimation.EasingFunction>
-            
         </DoubleAnimation>
         <DoubleAnimation Storyboard.TargetName="Indicator"
-                    Storyboard.TargetProperty="Opacity"
-                    To="1"
-                    Duration="0:0:0.28"/>
+                         Storyboard.TargetProperty="Opacity"
+                         To="1"
+                         Duration="0:0:0.28"/>
     </Storyboard>
 
-    <!-- 导航指示条收起 -->
+    <!-- ==================== 导航指示条收起 ==================== -->
     <Storyboard x:Key="SF.Anim.NavIndicatorCollapse">
         <DoubleAnimation Storyboard.TargetName="Indicator"
-                    Storyboard.TargetProperty="Height"
-                    To="0"
-                    Duration="0:0:0.28">
+                         Storyboard.TargetProperty="Height"
+                         To="0"
+                         Duration="0:0:0.28">
             <DoubleAnimation.EasingFunction>
                 <QuadraticEase EasingMode="EaseIn"/>
             </DoubleAnimation.EasingFunction>
         </DoubleAnimation>
         <DoubleAnimation Storyboard.TargetName="Indicator"
-                    Storyboard.TargetProperty="Opacity"
-                    To="0"
-                    Duration="0:0:0.22"/>
+                         Storyboard.TargetProperty="Opacity"
+                         To="0"
+                         Duration="0:0:0.22"/>
     </Storyboard>
 
-    
+    <!-- ==================== 侧边栏折叠（TargetName 须在 MainWindow 上 Begin） ==================== -->
+    <Storyboard x:Key="SF.Anim.Sidebar.Collapse">
+        <DoubleAnimation Storyboard.TargetName="SidebarBorder"
+                         Storyboard.TargetProperty="Width"
+                         To="{StaticResource SF.ControlsSize.NavBarCollapsed}"
+                         Duration="0:0:0.22">
+            <DoubleAnimation.EasingFunction>
+                <QuadraticEase EasingMode="EaseInOut"/>
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
+
+    <!-- ==================== 侧边栏展开 ==================== -->
+    <Storyboard x:Key="SF.Anim.Sidebar.Expand">
+        <DoubleAnimation Storyboard.TargetName="SidebarBorder"
+                         Storyboard.TargetProperty="Width"
+                         To="{StaticResource SF.ControlsSize.NavBarExpanded}"
+                         Duration="0:0:0.22">
+            <DoubleAnimation.EasingFunction>
+                <QuadraticEase EasingMode="EaseInOut"/>
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
 
 </ResourceDictionary>

@@ -1,29 +1,46 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
+using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Services;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
-    /// 设备管理页面：展示设备卡片列表（末尾附带一个“添加设备”占位卡片），
-    /// 并通过弹出式编辑面板（editPanel/editPopup）完成设备的新增/编辑/删除。
+    /// 设备管理页面。
+    /// <para>
+    /// 职责：展示设备卡片列表（末尾附带「添加设备」占位卡），
+    /// 通过弹出式编辑面板完成新增 / 编辑 / 删除；
+    /// 工具栏提供一键连接、一键断开、刷新等操作。
+    /// </para>
+    /// <para>
+    /// 刷新策略：
+    /// - 集合增删（Add/Remove/Load）→ <see cref="RebuildDisplayList"/> 重建列表；
+    /// - 连接状态等属性变化 → 依赖 <see cref="DeviceInfo"/> 的 INotifyPropertyChanged，
+    ///   由 <see cref="DeviceCard"/> 自行刷新，避免整表重建导致闪烁。
+    /// </para>
+    /// <para>
+    /// 编辑交互：<see cref="ShowEditPopup"/> 显示遮罩 + Popup（模态，仅面板可点）；
+    /// 所有关闭路径统一走 <see cref="CloseEditPopup"/>，避免遮罩残留。
+    /// </para>
     /// </summary>
     public partial class DevicePage : Page {
         /// <summary>
-        /// 实际绑定到 ItemsControl 的显示列表，内容为设备列表 + 末尾的 <see cref="AddDeviceMarker"/> 占位项。
-        /// 与 MyAppServices.Devices.Devices 解耦，避免 XAML 直接绑定业务集合导致模板匹配复杂化。
+        /// 绑定到 ItemsControl 的展示集合。
+        /// 内容为：全部 <see cref="DeviceInfo"/> + 末尾一个 <see cref="AddDeviceMarker"/>。
+        /// 与业务层 <c>MyAppServices.Devices.Devices</c> 解耦，便于按类型选择 DataTemplate。
         /// </summary>
         private readonly ObservableCollection<object> _displayList =
             new ObservableCollection<object>();
 
         /// <summary>
-        /// 构造页面：初始化控件、构建显示列表，并订阅设备集合变化事件以保持列表实时同步，
-        /// 同时订阅编辑面板的关闭/保存/删除请求事件。
+        /// 初始化页面：绑定列表、首次构建展示数据、订阅集合变化与编辑面板事件。
         /// </summary>
         public DevicePage () {
             InitializeComponent();
@@ -34,20 +51,35 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             MyAppServices.Devices.Devices.CollectionChanged += Devices_CollectionChanged;
 
             if (editPanel != null) {
-                editPanel.CloseRequested += () => { editPopup.IsOpen = false; };
+                editPanel.CloseRequested += () => CloseEditPopup();
                 editPanel.SaveRequested += EditPanel_SaveRequested;
                 editPanel.DeleteRequested += EditPanel_DeleteRequested;
             }
+
+            // 页面从 Frame 卸下时取消全局订阅
+            Unloaded += DevicePage_Unloaded;
         }
 
-        /// <summary>设备集合发生增删改时重建显示列表。</summary>
+        /// <summary>
+        /// 取消全局订阅，避免页面被卸下后仍然响应业务层事件。
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void DevicePage_Unloaded (object sender, RoutedEventArgs e) {
+            MyAppServices.Devices.Devices.CollectionChanged -= Devices_CollectionChanged;
+            Unloaded -= DevicePage_Unloaded;
+        }
+
+        /// <summary>
+        /// 业务设备集合发生变化（增/删/Reset）时重建展示列表。
+        /// </summary>
         private void Devices_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) {
             RebuildDisplayList();
         }
 
         /// <summary>
-        /// 重建显示列表：清空后依次加入全部设备，最后追加 <see cref="AddDeviceMarker"/> 占位项，
-        /// 保证“添加设备”卡片始终显示在列表末尾。
+        /// 重建展示列表：清空后写入全部设备，再追加「添加」占位项，并刷新数量角标。
+        /// 应只在设备数量变化或从磁盘重新 Load 时调用。
         /// </summary>
         private void RebuildDisplayList () {
             _displayList.Clear();
@@ -56,33 +88,35 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 _displayList.Add(d);
 
             _displayList.Add(AddDeviceMarker.Instance);
-
             RefreshCount();
         }
 
-        /// <summary>刷新页面上显示的设备数量文本。</summary>
+        /// <summary>
+        /// 刷新「设备总数」文本（不含添加占位卡）。
+        /// </summary>
         private void RefreshCount () {
             if (deviceCountText != null)
                 deviceCountText.Text = MyAppServices.Devices.Devices.Count.ToString();
         }
 
         /// <summary>
-        /// 添加设备（由 AddDeviceCard 调用）
+        /// 打开「添加设备」弹窗（由 <see cref="AddDeviceCard"/> 点击时调用）。
         /// </summary>
         public void OpenAddDevice () {
-            DeviceInfo blank = new DeviceInfo {
+            DeviceInfo blank = new DeviceInfo
+            {
                 Name = "",
                 Model = "",
                 Protocol = "Modbus TCP"
             };
-
             editPanel.LoadData(blank, true);
             ShowEditPopup();
         }
 
         /// <summary>
-        /// 编辑设备（后续 DeviceCard 可调）
+        /// 打开「编辑设备」弹窗（由 <see cref="DeviceCard"/> 编辑按钮调用）。
         /// </summary>
+        /// <param name="info">当前卡片对应的设备数据，不能为 null。</param>
         public void OpenEditDevice (DeviceInfo info) {
             if (info == null)
                 return;
@@ -92,7 +126,8 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         /// <summary>
-        /// 延后打开 Popup，避免 MouseUp 导致 StaysOpen=false 的弹窗立刻关闭。
+        /// 显示编辑层：遮罩（挡住页面其它区域）+ 居中 Popup。
+        /// 使用 Dispatcher 延迟打开，避免在 MouseUp 同一周期内打开后被立刻关闭。
         /// </summary>
         private void ShowEditPopup () {
             Window owner = Window.GetWindow(this);
@@ -101,49 +136,119 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
             editPopup.Placement = PlacementMode.Center;
 
-            // 若当前已在鼠标事件中打开，同一次抬起会被 Popup 当成“外部点击”而马上关掉
+            if (editMask != null)
+                editMask.Visibility = Visibility.Visible;
+
             Dispatcher.BeginInvoke(new Action(() => {
                 editPopup.IsOpen = true;
             }), DispatcherPriority.Input);
         }
 
-        private void EditPanel_SaveRequested () {
-            DeviceInfo info = editPanel.BuildDeviceInfo();
-
-            if (string.IsNullOrWhiteSpace(info.Name)) {
-                MessageBox.Show("请填写设备名称", "提示",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            if (editPanel.IsNew)
-                MyAppServices.Devices.Add(info);
-            else
-                MyAppServices.Devices.Update(info);
-
+        /// <summary>
+        /// 关闭编辑 Popup 并隐藏遮罩。
+        /// 取消、保存、删除等所有关窗入口必须调用本方法，禁止只写 editPopup.IsOpen = false。
+        /// </summary>
+        private void CloseEditPopup () {
             editPopup.IsOpen = false;
+            if (editMask != null)
+                editMask.Visibility = Visibility.Collapsed;
         }
 
         /// <summary>
-        /// 删除确认请求：弹出二次确认对话框，用户确认后才会真正调用 Remove 并关闭弹窗。
+        /// 编辑面板「保存」：校验名称后调用业务 Add 或 Update，然后关闭弹窗。
+        /// 集合变更会触发 <see cref="Devices_CollectionChanged"/> 从而刷新列表。
         /// </summary>
-        private void EditPanel_DeleteRequested () {
+        private void EditPanel_SaveRequested () {
             DeviceInfo info = editPanel.BuildDeviceInfo();
-            if (editPanel.IsNew || string.IsNullOrEmpty(info.Id)) {
-                editPopup.IsOpen = false;
+
+            // 名称为空：直接关窗（不弹 MessageBox）
+            if (string.IsNullOrWhiteSpace(info.Name)) {
+                CloseEditPopup();
                 return;
             }
 
-            MessageBoxResult r = MessageBox.Show(
-                "确定删除该设备？",
-                "确认",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (r == MessageBoxResult.Yes) {
-                MyAppServices.Devices.Remove(info.Id);
-                editPopup.IsOpen = false;
+            try {
+                if (editPanel.IsNew)
+                    MyAppServices.Devices.Add(info);
+                else
+                    MyAppServices.Devices.Update(info);
+            } catch {
+                // 设备已删除等异常：忽略，仍关闭面板
             }
+
+            CloseEditPopup();
+        }
+
+        /// <summary>
+        /// 编辑面板「删除设备」：调用业务 Remove 后关闭弹窗（无二次确认）。
+        /// </summary>
+        private void EditPanel_DeleteRequested () {
+            DeviceInfo info = editPanel.BuildDeviceInfo();
+
+            if (!editPanel.IsNew && info != null && !string.IsNullOrEmpty(info.Id)) {
+                try {
+                    MyAppServices.Devices.Remove(info.Id);
+                } catch {
+                    // 忽略
+                }
+            }
+
+            CloseEditPopup();
+        }
+
+        /// <summary>
+        /// 工具栏「一键连接」：对所有未连接设备依次异步连接。
+        /// 只修改各 <see cref="DeviceInfo"/> 属性，不重建列表，由卡片响应属性通知。
+        /// </summary>
+        private async void BtnConnectAll_Click (object sender, RoutedEventArgs e) {
+            var list = MyAppServices.Devices.Devices
+                .Where(d => d != null && !d.IsConnected)
+                .ToList();
+
+            foreach (DeviceInfo d in list) {
+                d.StatusType = DeviceStatusType.Connecting;
+                d.IsConnected = false;
+            }
+
+            foreach (DeviceInfo d in list) {
+                try {
+                    await MyAppServices.Devices.ConnectAsync(d.Id, CancellationToken.None);
+                } catch {
+                    d.IsConnected = false;
+                    d.StatusType = DeviceStatusType.Error;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 工具栏「一键断开」：断开全部已管理设备的会话。
+        /// 状态变更由 DeviceInfo 通知卡片，无需 RebuildDisplayList。
+        /// </summary>
+        private void BtnDisconnectAll_Click (object sender, RoutedEventArgs e) {
+            foreach (DeviceInfo d in MyAppServices.Devices.Devices.ToList()) {
+                if (d == null || string.IsNullOrEmpty(d.Id))
+                    continue;
+                MyAppServices.Devices.Disconnect(d.Id);
+            }
+        }
+
+        /// <summary>
+        /// 工具栏「刷新」：从持久化重新加载设备列表（连接状态会按业务规则重置为离线）。
+        /// </summary>
+        private void BtnRefresh_Click (object sender, RoutedEventArgs e) {
+            MyAppServices.Devices.Load();
+            RebuildDisplayList();
+        }
+
+        /// <summary>
+        /// 工具栏「删除」：尚未实现多选，提示用户走卡片编辑面板中的删除。
+        /// </summary>
+        private void BtnDeleteSelected_Click (object sender, RoutedEventArgs e) {
+            MessageBox.Show(
+                "请先在设备卡片中点「编辑」再删除。",
+                "提示",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
     }
 }

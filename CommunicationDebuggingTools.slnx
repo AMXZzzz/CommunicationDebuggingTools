@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="CommunicationDebuggingTools.Business/CommunicationDebuggingTools.Business.csproj" Id="b8d745d0-2789-4ce3-bbd3-45efdfe9cbbf" />
   <Project Path="CommunicationDebuggingTools.Core/CommunicationDebuggingTools.Core.csproj" Id="80a3d4a2-c795-4dc6-9a2c-a13397241885" />
+  <Project Path="CommunicationDebuggingTools.Tests/CommunicationDebuggingTools.Tests.csproj" Id="96e0da3c-84f5-491f-ba7a-8a5d904525db" />
   <Project Path="CommunicationDebuggingTools/CommunicationDebuggingTools.csproj" Id="61200b47-bc1d-4d0b-8c02-ff1af23a0a4e" />
   <Project Path="Plugin.ModbusTcp/Plugin.ModbusTcp.csproj" Id="ba21f510-a243-40f0-a52f-4919278c9a3f" />
 </Solution>
