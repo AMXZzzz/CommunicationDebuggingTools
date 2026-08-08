@@ -59,5 +59,10 @@ namespace CommunicationDebuggingTools.Core.Interfaces {
         /// <summary>获取该设备当前协议实例（未连接可为 null）。</summary>
         /// <param name="deviceId">设备唯一标识。</param>
         IProtocol GetProtocol (string deviceId);
+
+        /// <summary>
+        /// 一次性断开所有设备的通信连接（用于应用退出时清理资源）。
+        /// </summary>
+        void DisconnectAll ();
     }
 }

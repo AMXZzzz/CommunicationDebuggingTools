@@ -243,6 +243,14 @@ namespace CommunicationDebuggingTools.Business.Device {
         }
 
         /// <summary>
+        /// 一次性断开所有设备的通信连接并释放底层协议资源。
+        /// </summary>
+        public void DisconnectAll () {
+            foreach (var id in _sessions.Keys.ToList())
+                Disconnect(id);
+        }
+
+        /// <summary>
         /// 获取指定设备当前的协议会话实例（仅在已成功连接时存在）。
         /// </summary>
         /// <param name="deviceId">设备唯一标识。</param>
