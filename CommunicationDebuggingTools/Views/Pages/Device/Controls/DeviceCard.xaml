@@ -31,6 +31,7 @@
                     Background="{StaticResource SF.Brush.Bg.Hover}"
                     BorderBrush="{StaticResource SF.Brush.Border.Default}"
                     BorderThickness="0 0 0 1"
+                    CornerRadius="10 10 0 0"
                     Padding="16 14">
                 <Grid>
                     <Grid.ColumnDefinitions>

@@ -55,6 +55,8 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Services\MyAppServices.cs" />
+    <Compile Include="Views\Pages\Device\AddDeviceMarker.cs" />
     <Compile Include="Views\Pages\Device\Controls\AddDeviceCard.xaml.cs">
       <DependentUpon>AddDeviceCard.xaml</DependentUpon>
     </Compile>
@@ -221,7 +223,6 @@
     <Folder Include="Controls\" />
     <Folder Include="Languages\" />
     <Folder Include="Models\" />
-    <Folder Include="Services\" />
     <Folder Include="ViewModels\" />
   </ItemGroup>
   <ItemGroup>

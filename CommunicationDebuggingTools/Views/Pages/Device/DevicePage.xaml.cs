@@ -1,74 +1,115 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Controls.Primitives;
+using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Services;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
-    /// <summary>
-    /// DevicePage.xaml 的交互逻辑
-    /// </summary>
     public partial class DevicePage : Page {
+        private readonly ObservableCollection<object> _displayList =
+            new ObservableCollection<object>();
+
         public DevicePage () {
             InitializeComponent();
 
-            deviceCard1.SetStatus("RUN", "Success");
-            deviceCard1.SetDeviceName("上板机");
-            deviceCard1.SetPlcModelName("FPXH C60ET");
+            deviceList.ItemsSource = _displayList;
+            RebuildDisplayList();
 
-            deviceCard2.SetStatus("连接中...", "Warning");
-            deviceCard2.SetDeviceName("印刷机");
-            deviceCard2.SetPlcModelName("FPXH C60ET");
+            MyAppServices.Devices.Devices.CollectionChanged += Devices_CollectionChanged;
 
-            deviceCard3.SetStatus("离线", "Offline");
-            deviceCard3.SetDeviceName("SPI");
-            deviceCard3.SetPlcModelName("FPXH C60ET");
-
-            deviceCard4.SetStatus("通信超时", "Error");
-            deviceCard4.SetDeviceName("贴片机");
-            deviceCard4.SetPlcModelName("FPXH C60ET");
-
-            deviceCard5.SetStatus("RUN", "Success");
-            deviceCard5.SetDeviceName("回流焊");
-            deviceCard5.SetPlcModelName("FPXH C60ET");
-
-            deviceCard6.SetStatus("RUN", "Success");
-            deviceCard6.SetDeviceName("AOI");
-            deviceCard6.SetPlcModelName("FPXH C60ET");
-
-            deviceCard7.SetStatus("RUN", "Success");
-            deviceCard7.SetDeviceName("下板机");
-            deviceCard7.SetPlcModelName("FPXH C60ET");
-
-
-
-            deviceCard1.EditClicked += () =>
-            {
-                editPanel.LoadData(
-                        "上板机",
-                        "FPXH C60ET",
-                        "Modbus TCP",
-                        "192.168.0.1",
-                        "502",
-                        "1",
-                        false,
-                        "RUN");
-                editPopup.PlacementTarget = Window.GetWindow(this);
-                editPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Center;
-                editPopup.IsOpen = true;
-            };
-
-            editPanel.CloseRequested += () => editPopup.IsOpen = false;
+            if (editPanel != null) {
+                editPanel.CloseRequested += () => { editPopup.IsOpen = false; };
+                editPanel.SaveRequested += EditPanel_SaveRequested;
+                editPanel.DeleteRequested += EditPanel_DeleteRequested;
+            }
         }
 
+        private void Devices_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) {
+            RebuildDisplayList();
+        }
+
+        private void RebuildDisplayList () {
+            _displayList.Clear();
+
+            foreach (DeviceInfo d in MyAppServices.Devices.Devices)
+                _displayList.Add(d);
+
+            _displayList.Add(AddDeviceMarker.Instance);
+
+            RefreshCount();
+        }
+
+        private void RefreshCount () {
+            if (deviceCountText != null)
+                deviceCountText.Text = MyAppServices.Devices.Devices.Count.ToString();
+        }
+
+        /// <summary>
+        /// 添加设备（由 AddDeviceCard 调用）
+        /// </summary>
+        public void OpenAddDevice () {
+            DeviceInfo blank = new DeviceInfo();
+            blank.Name = "";
+            blank.Model = "";
+            blank.Protocol = "Modbus TCP";
+
+            editPanel.LoadData(blank, true);
+
+            editPopup.PlacementTarget = Window.GetWindow(this);
+            editPopup.Placement = PlacementMode.Center;
+            editPopup.IsOpen = true;
+        }
+
+        /// <summary>
+        /// 编辑设备（后续 DeviceCard 可调）
+        /// </summary>
+        public void OpenEditDevice (DeviceInfo info) {
+            if (info == null)
+                return;
+
+            editPanel.LoadData(info, false);
+
+            editPopup.PlacementTarget = Window.GetWindow(this);
+            editPopup.Placement = PlacementMode.Center;
+            editPopup.IsOpen = true;
+        }
+
+        private void EditPanel_SaveRequested () {
+            DeviceInfo info = editPanel.BuildDeviceInfo();
+
+            if (string.IsNullOrWhiteSpace(info.Name)) {
+                MessageBox.Show("请填写设备名称", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (editPanel.IsNew)
+                MyAppServices.Devices.Add(info);
+            else
+                MyAppServices.Devices.Update(info);
+
+            editPopup.IsOpen = false;
+        }
+
+        private void EditPanel_DeleteRequested () {
+            DeviceInfo info = editPanel.BuildDeviceInfo();
+            if (editPanel.IsNew || string.IsNullOrEmpty(info.Id)) {
+                editPopup.IsOpen = false;
+                return;
+            }
+
+            MessageBoxResult r = MessageBox.Show(
+                "确定删除该设备？",
+                "确认",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (r == MessageBoxResult.Yes) {
+                MyAppServices.Devices.Remove(info.Id);
+                editPopup.IsOpen = false;
+            }
+        }
     }
 }

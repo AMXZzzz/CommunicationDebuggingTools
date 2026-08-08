@@ -56,7 +56,7 @@ namespace CommunicationDebuggingTools.Core.Models {
         }
 
         /// <summary>
-        /// 是否双轨（兼容旧逻辑）<
+        /// 是否双轨
         /// /summary>
         public bool IsDualLane {
             get { return Lane == LaneType.Dual; }

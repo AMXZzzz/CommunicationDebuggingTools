@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using CommunicationDebuggingTools.Core.Interfaces;
 
-namespace CommunicationDebuggingTools.Business.Device {
+namespace CommunicationDebuggingTools.Business.Tools {
     /// <summary>
     /// 扫描 plugins 目录，加载实现了 IProtocol 的插件
     /// </summary>

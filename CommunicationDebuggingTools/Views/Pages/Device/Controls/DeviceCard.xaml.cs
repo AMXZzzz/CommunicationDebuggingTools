@@ -1,83 +1,148 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
-    /// DeviceCard.xaml 的交互逻辑
+    /// PLC 设备卡片
     /// </summary>
-    public partial class DeviceCard : System.Windows.Controls.UserControl {
-
+    public partial class DeviceCard : UserControl {
+        /// <summary>点击「编辑」时通知外部</summary>
         public event Action EditClicked;
+
+        public static readonly DependencyProperty DeviceProperty =
+            DependencyProperty.Register(
+                "Device",
+                typeof(DeviceInfo),
+                typeof(DeviceCard),
+                new PropertyMetadata(null, OnDeviceChanged));
+
+        public DeviceInfo Device {
+            get { return (DeviceInfo)GetValue(DeviceProperty); }
+            set { SetValue(DeviceProperty, value); }
+        }
+
         public DeviceCard () {
             InitializeComponent();
 
-            // 编辑按钮点击 → 通知页面
             if (btnEdit != null)
-                btnEdit.Click += (s, e) => EditClicked?.Invoke();
+                btnEdit.Click += (s, e) => {
+                    if (EditClicked != null)
+                        EditClicked();
+                };
+        }
+
+        private static void OnDeviceChanged (DependencyObject d, DependencyPropertyChangedEventArgs e) {
+            var card = (DeviceCard)d;
+            card.ApplyDevice(e.NewValue as DeviceInfo);
         }
 
         /// <summary>
-        /// 设置设备状态显示（仅 UI，后续由数据绑定替代）
+        /// 根据 DeviceInfo 刷新界面
         /// </summary>
-        public void SetStatus (string statusText, string statusType) {
-            plcCurrentState.Text = statusText;
+        private void ApplyDevice (DeviceInfo info) {
+            if (info == null)
+                return;
 
-            System.Windows.Media.Brush brush;
-            switch (statusType) {
-                case "Success":
-                    brush = (System.Windows.Media.Brush)FindResource("SF.Brush.Status.Success");
-                    btnPrimary.Content = "断开";
-                    btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
+            SetDeviceName(info.Name ?? "");
+            SetPlcModelName(info.Model ?? "");
+
+            if (ipAddress != null)
+                ipAddress.Text = info.Ip ?? "";
+            if (protocolName != null)
+                protocolName.Text = info.Protocol ?? "";
+
+            ApplyStatusVisual(info.StatusType);
+        }
+
+        private void ApplyStatusVisual (DeviceStatusType type) {
+            string statusText;
+            string statusKey;
+
+            switch (type) {
+                case DeviceStatusType.Success:
+                    statusText = "RUN";
+                    statusKey = "Success";
                     break;
-                case "Warning":
-                    brush = (System.Windows.Media.Brush)FindResource("SF.Brush.Status.Warning");
-                    btnPrimary.Content = "取消";
-                    btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
+                case DeviceStatusType.Connecting:
+                    statusText = "连接中...";
+                    statusKey = "Warning";
                     break;
-                case "Error":
-                    brush = (System.Windows.Media.Brush)FindResource("SF.Brush.Status.Error");
-                    btnPrimary.Content = "重连";
-                    btnPrimary.Style = (Style)FindResource("SF.Style.PrimaryButton");
+                case DeviceStatusType.Warning:
+                    statusText = "警告";
+                    statusKey = "Warning";
                     break;
-                default: // Offline
-                    brush = (System.Windows.Media.Brush)FindResource("SF.Brush.Text.Secondary");
-                    btnPrimary.Content = "连接";
-                    btnPrimary.Style = (Style)FindResource("SF.Style.PrimaryButton");
+                case DeviceStatusType.Error:
+                    statusText = "ALARM";
+                    statusKey = "Error";
+                    break;
+                default:
+                    statusText = "离线";
+                    statusKey = "Offline";
                     break;
             }
 
-            plcStatusLight.Fill = brush;
-            plcCurrentState.Foreground = brush;
-            AccentBar.Background = brush;
+            SetStatus(statusText, statusKey);
         }
 
         /// <summary>
-        /// 设置设备名称显示（仅 UI，后续由数据绑定替代）
+        /// 设置状态文字、指示灯、主按钮样式
         /// </summary>
-        /// <param name="deviceName"></param>
+        public void SetStatus (string statusText, string statusType) {
+            if (plcCurrentState != null)
+                plcCurrentState.Text = statusText;
+
+            Brush brush;
+            switch (statusType) {
+                case "Success":
+                    brush = (Brush)FindResource("SF.Brush.Status.Success");
+                    if (btnPrimary != null) {
+                        btnPrimary.Content = "断开";
+                        btnPrimary.Style = (Style)FindResource("SF.Style.DisconnectButton");
+                    }
+                    break;
+                case "Warning":
+                    brush = (Brush)FindResource("SF.Brush.Status.Warning");
+                    if (btnPrimary != null) {
+                        btnPrimary.Content = "取消";
+                        btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
+                    }
+                    break;
+                case "Error":
+                    brush = (Brush)FindResource("SF.Brush.Status.Error");
+                    if (btnPrimary != null) {
+                        btnPrimary.Content = "重连";
+                        btnPrimary.Style = (Style)FindResource("SF.Style.PrimaryButton");
+                    }
+                    break;
+                default:
+                    brush = (Brush)FindResource("SF.Brush.Text.Secondary");
+                    if (btnPrimary != null) {
+                        btnPrimary.Content = "连接";
+                        btnPrimary.Style = (Style)FindResource("SF.Style.PrimaryButton");
+                    }
+                    break;
+            }
+
+            if (plcStatusLight != null)
+                plcStatusLight.Fill = brush;
+            if (plcCurrentState != null)
+                plcCurrentState.Foreground = brush;
+            if (AccentBar != null)
+                AccentBar.Background = brush;
+        }
+
         public void SetDeviceName (string deviceName) {
-            devicenName.Text = deviceName;
+            if (devicenName != null)
+                devicenName.Text = deviceName ?? "";
         }
 
-
-        /// <summary>
-        /// 设置设备型号显示（仅 UI，后续由数据绑定替代）
-        /// </summary>
-        /// <param name="deviceType"></param>
         public void SetPlcModelName (string deviceType) {
-            plcModelName.Text = deviceType;
+            if (plcModelName != null)
+                plcModelName.Text = deviceType ?? "";
         }
     }
 }
