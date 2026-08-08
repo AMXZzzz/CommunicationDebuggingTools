@@ -1,0 +1,83 @@
+﻿<Page x:Class="CommunicationDebuggingTools.Views.Pages.Device.DevicePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:device="clr-namespace:CommunicationDebuggingTools.Views.Pages.Device"
+      Background="{StaticResource SF.Brush.Bg.App}"
+      Title="DevicePage">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <!-- 工具栏 -->
+            <RowDefinition Height="Auto"/>
+            <!-- 统计信息 -->
+            <RowDefinition Height="Auto"/>
+            <!-- 设备卡片列表 -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==================== 工具栏 ==================== -->
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
+                    Background="{StaticResource SF.Brush.Bg.Surface}"
+                    Margin="0 0 0 12">
+
+            <!-- 一键连接：主操作（蓝色） -->
+            <Button Content="一键连接"
+                    Style="{StaticResource SF.Style.PrimaryButton}"/>
+
+            <!-- 一键断开：危险操作（红色系） -->
+            <Button Content="一键断开"
+                    Style="{StaticResource SF.Style.DangerButton}"/>
+
+            <!-- 刷新：普通操作（深灰） -->
+            <Button Content="刷新"
+                    Style="{StaticResource SF.Style.DarkButton}"/>
+
+            <!-- 删除：危险操作（红色系） -->
+            <Button Content="删除"
+                    Style="{StaticResource SF.Style.DangerButton}"/>
+        </StackPanel>
+
+        <!-- ==================== 统计信息 ==================== -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    Margin="0 0 0 16">
+
+            <TextBlock Text="设备总数: "
+                       FontSize="14"
+                       Foreground="{StaticResource SF.Brush.Text.Secondary}"
+                       VerticalAlignment="Center"/>
+
+            <!-- 数量徽章 -->
+            <Border Background="{StaticResource SF.Brush.Bg.Hover}"
+                    CornerRadius="10"
+                    Padding="8 2"
+                    Margin="8 0 0 0"
+                    VerticalAlignment="Center">
+                <TextBlock Text="4"
+                           FontSize="12"
+                           Foreground="{StaticResource SF.Brush.Text.Primary}"/>
+            </Border>
+        </StackPanel>
+
+        <!-- ==================== 设备卡片列表 ==================== -->
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+
+            <!-- WrapPanel：自动换行排列卡片 -->
+            <WrapPanel>
+                <device:DeviceCard x:Name="deviceCard1"/>
+                <device:DeviceCard x:Name="deviceCard2"/>
+                <device:DeviceCard x:Name="deviceCard3"/>   
+                <device:DeviceCard x:Name="deviceCard4"/>   
+                <device:DeviceCard x:Name="deviceCard5"/>   
+                <device:DeviceCard x:Name="deviceCard6"/>   
+                <device:DeviceCard x:Name="deviceCard7"/>   
+                <device:AddDeviceCard x:Name="addDeviceCard"/>
+            </WrapPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

@@ -1,0 +1,141 @@
+﻿<!-- 自定义控件：PLC 设备卡片 -->
+<UserControl x:Class="CommunicationDebuggingTools.Views.Pages.Device.DeviceCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="{StaticResource SF.ControlsSize.PLCBarWidth}"
+             Height="{StaticResource SF.ControlsSize.PLCBarHeight}"
+             Margin="0 0 16 16">
+
+    <!-- ==================== 卡片外框（含悬停） ==================== -->
+    <Border BorderThickness="1"
+            CornerRadius="6"
+            Padding="16">
+        <Border.Style>
+            <Style TargetType="Border">
+                <!-- 默认：表面背景 + 默认边框 -->
+                <Setter Property="Background" Value="{StaticResource SF.Brush.Bg.Surface}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource SF.Brush.Border.Default}"/>
+                <Style.Triggers>
+                    <!-- 悬停：强调色边框 + 悬停背景 -->
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{StaticResource SF.Brush.Accent.Default}"/>
+                        <Setter Property="Background" Value="{StaticResource SF.Brush.Bg.Hover}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- 标题行 -->
+                <RowDefinition Height="Auto"/>
+                <!-- 详情行 -->
+                <RowDefinition Height="Auto"/>
+                <!-- 操作行 -->
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ==================== 第一行：标题 ==================== -->
+            <Grid Grid.Row="0"
+                  Margin="0 0 0 12"
+                  Height="{StaticResource SF.ControlsSize.AccentBarHeight}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- 左侧强调色指示条 -->
+                <Border x:Name="AccentBar"
+                        Grid.Column="0"
+                        Width="{StaticResource SF.ControlsSize.AccentBarWidth}"
+                        CornerRadius="2"
+                        VerticalAlignment="Stretch"
+                        Margin="0 0 10 0"
+                        Background="{StaticResource SF.Brush.Accent.Default}"/>
+
+                <!-- 设备名称 + 型号 -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="devicenName"
+                               Text="PLC1"
+                               FontSize="{StaticResource SF.FontSize.DeviceNameFontSize}"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource SF.Brush.Text.Primary}"/>
+                    <TextBlock x:Name="plcModelName"
+                               Text="Siemens S7-1500"
+                               FontSize="{StaticResource SF.FontSize.PlcModelNameFontSize}"
+                               Foreground="{StaticResource SF.Brush.Text.Secondary}"
+                               Margin="0 2 0 0"/>
+                </StackPanel>
+
+                <!-- 状态指示灯 -->
+                <Ellipse x:Name="plcStatusLight"
+                         Grid.Column="2"
+                         Width="{StaticResource SF.ControlsSize.PlcStatusLightWidth}"
+                         Height="{StaticResource SF.ControlsSize.PlcStatusLightHeight}"
+                         Fill="{StaticResource SF.Brush.Status.Success}"
+                         VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- ==================== 第二行：详细信息 ==================== -->
+            <StackPanel x:Name="detailsPanel"
+                        Grid.Row="1"
+                        Margin="0 0 0 16">
+
+                <!-- IP 地址 -->
+                <Grid Margin="0 0 0 6">
+                    <TextBlock Text="IP 地址"
+                               Foreground="{StaticResource SF.Brush.Text.Secondary}"
+                               FontSize="{StaticResource SF.FontSize.DetailsPanelShowFontSize}"/>
+                    <TextBlock x:Name="ipAddress"
+                               Text="192.168.0.1"
+                               FontSize="{StaticResource SF.FontSize.DetailsPanelShowFontSize}"
+                               Foreground="{StaticResource SF.Brush.Text.Primary}"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+
+                <!-- 协议 -->
+                <Grid Margin="0 0 0 6">
+                    <TextBlock Text="协议"
+                               Foreground="{StaticResource SF.Brush.Text.Secondary}"
+                               FontSize="{StaticResource SF.FontSize.DetailsPanelShowFontSize}"/>
+                    <TextBlock x:Name="protocolName"
+                               Text="Modbus TCP"
+                               FontSize="{StaticResource SF.FontSize.DetailsPanelShowFontSize}"
+                               Foreground="{StaticResource SF.Brush.Text.Primary}"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+
+                <!-- 当前状态 -->
+                <Grid Margin="0 0 0 6">
+                    <TextBlock Text="当前状态"
+                               Foreground="{StaticResource SF.Brush.Text.Secondary}"
+                               FontSize="{StaticResource SF.FontSize.DetailsPanelShowFontSize}"/>
+                    <TextBlock x:Name="plcCurrentState"
+                               Text="RUN"
+                               FontSize="{StaticResource SF.FontSize.DetailsPanelShowFontSize}"
+                               Foreground="{StaticResource SF.Brush.Text.Primary}"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- ==================== 第三行：操作按钮 ==================== -->
+            <StackPanel x:Name="plcActionsStackPanel"
+                        Grid.Row="2"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Right">
+
+                <!-- 连接 / 断开 -->
+                <Button x:Name="btnPrimary"
+                        Content="连接"
+                        Style="{StaticResource SF.Style.PrimaryButton}"/>
+
+                <!-- 编辑 -->
+                <Button x:Name="btnEdit"
+                        Content="编辑"
+                        Style="{StaticResource SF.Style.DarkButton}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
