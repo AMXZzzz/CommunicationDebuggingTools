@@ -13,6 +13,7 @@ namespace CommunicationDebuggingTools.Services {
     public static class MyAppServices {
         /// <summary>全局共享的设备业务服务实例，UI 页面统一通过它访问/操作设备。</summary>
         public static IDeviceService Devices { get; private set; }
+
         /// <summary>全局共享的协议插件解析器实例，可用于获取已加载的协议名称列表。</summary>
         public static IProtocolResolver Protocols { get; private set; }
 

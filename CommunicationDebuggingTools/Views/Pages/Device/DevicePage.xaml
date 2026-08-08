@@ -16,42 +16,9 @@
         </Grid.RowDefinitions>
 
         <!-- ==================== 工具栏 ==================== -->
-        <StackPanel Grid.Row="0"
-                    Orientation="Horizontal"
-                    Margin="16,16,16,12">
-            <Button Content="一键连接"
-                    Style="{StaticResource SF.Style.PrimaryButton}"
-                    Click="BtnConnectAll_Click"/>
-            <Button Content="一键断开"
-                    Style="{StaticResource SF.Style.DangerButton}"
-                    Click="BtnDisconnectAll_Click"/>
-            <Button Content="刷新"
-                    Style="{StaticResource SF.Style.DarkButton}"
-                    Click="BtnRefresh_Click"/>
-            <Button Content="删除"
-                    Style="{StaticResource SF.Style.DangerButton}"
-                    Click="BtnDeleteSelected_Click"/>
-        </StackPanel>
-
-        <!-- ==================== 统计 ==================== -->
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="16,0,16,16">
-            <TextBlock Text="设备总数: "
-                       FontSize="14"
-                       Foreground="{StaticResource SF.Brush.Text.Secondary}"
-                       VerticalAlignment="Center"/>
-            <Border Background="{StaticResource SF.Brush.Bg.Hover}"
-                    CornerRadius="10"
-                    Padding="8,2"
-                    Margin="8,0,0,0"
-                    VerticalAlignment="Center">
-                <TextBlock x:Name="deviceCountText"
-                           Text="0"
-                           FontSize="12"
-                           Foreground="{StaticResource SF.Brush.Text.Primary}"/>
-            </Border>
-        </StackPanel>
+        <device:DeviceToolBar x:Name="toolBar"
+                              Grid.Row="0"
+                              Margin="0,0,0,12"/>
 
         <!-- ==================== 设备列表 ==================== -->
         <ScrollViewer x:Name="deviceScroll"

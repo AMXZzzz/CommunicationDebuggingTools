@@ -120,18 +120,32 @@
                 </StackPanel>
 
                 <!-- 底部按钮：Content/Style 由代码按状态切换 -->
-                <StackPanel Grid.Row="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Margin="16 0 16 0">
-                    <Button x:Name="btnPrimary"
-                            Content="连接"
-                            Style="{StaticResource SF.Style.PrimaryButton}"/>
-                    <Button x:Name="btnEdit"
-                            Content="编辑"
-                            Style="{StaticResource SF.Style.DarkButton}"/>
-                </StackPanel>
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- 删除复选框 -->
+                    <CheckBox x:Name="chkSelect"
+                              Style="{StaticResource SF.Style.DarkCheckBox}"
+                              Visibility="Collapsed"
+                              VerticalAlignment="Center"
+                              Margin="16 0 0 0"
+                              Checked="ChkSelect_Changed"
+                              Unchecked="ChkSelect_Changed"/>
+
+                    <!-- 编辑按钮 -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="btnPrimary"
+                                Content="连接"
+                                Style="{StaticResource SF.Style.PrimaryButton}"/>
+                        <Button x:Name="btnEdit"
+                                Content="编辑"
+                                Style="{StaticResource SF.Style.DarkButton}"/>
+                 
+                    </StackPanel>
+                </Grid>
             </Grid>
         </DockPanel>
     </Border>

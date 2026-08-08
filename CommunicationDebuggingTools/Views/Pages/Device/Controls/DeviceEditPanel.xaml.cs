@@ -1,9 +1,11 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Services;
+using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using CommunicationDebuggingTools.Core.Enums;
-using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
@@ -29,6 +31,32 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         /// <summary>
+        /// 加载协议列表到下拉框：从 MyAppServices.Protocols 获取所有协议名称，若没有任何插件则使用默认占位。
+        /// </summary>
+        private void LoadProtocolList () {
+            if (cmbProtocol == null)
+                return;
+
+            cmbProtocol.Items.Clear();
+
+            if (MyAppServices.Protocols == null)
+                return;
+
+            IList<string> names = MyAppServices.Protocols.GetProtocolNames();
+            if (names == null)
+                return;
+
+            foreach (string name in names) {
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+                cmbProtocol.Items.Add(new ComboBoxItem { Content = name });
+            }
+
+            if (cmbProtocol.Items.Count > 0)
+                cmbProtocol.SelectedIndex = 0;
+        }
+
+        /// <summary>
         /// 载入到界面（添加时传新 DeviceInfo 默认值；编辑时传原设备）
         /// </summary>
         /// <param name="info">待加载的设备信息，为 null 时使用默认空对象。</param>
@@ -39,6 +67,9 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
             _editingId = isNew ? null : info.Id;
             _isDual = info.IsDualLane;
+
+            LoadProtocolList();
+            SelectProtocol(info.Protocol);
 
             if (txtName != null)
                 txtName.Text = info.Name ?? "";
@@ -53,12 +84,9 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (txtStatus != null)
                 txtStatus.Text = info.StatusText ?? "离线";
 
-            SelectProtocol(info.Protocol);
+
             UpdateLaneButtons();
 
-            // 新建时隐藏删除
-            //if (btnDelete != null)
-            //    btnDelete.Visibility = isNew ? Visibility.Collapsed : Visibility.Visible;
         }
 
         /// <summary>
@@ -126,13 +154,14 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         /// <summary>获取下拉框当前选中的协议名称文本。</summary>
         private string GetSelectedProtocol () {
             if (cmbProtocol == null || cmbProtocol.SelectedItem == null)
-                return "Modbus TCP";
+                return "";   // 或 null，保存时再校验
 
             ComboBoxItem item = cmbProtocol.SelectedItem as ComboBoxItem;
             if (item != null && item.Content != null)
                 return item.Content.ToString();
 
-            return cmbProtocol.SelectedItem.ToString();
+            string s = cmbProtocol.SelectedItem as string;
+            return string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
         }
 
         /// <summary>根据当前轨道模式刷新单轨/双轨按钮的高亮样式。</summary>

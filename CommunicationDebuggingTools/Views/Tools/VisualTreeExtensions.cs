@@ -50,5 +50,27 @@ namespace CommunicationDebuggingTools.Views.Tools {
             }
             return null;
         }
+
+        /// <summary>
+        /// 查找指定类型的所有后代（深度优先）
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="parent"></param>
+        /// <returns></returns>
+        public static IEnumerable<T> FindVisualChildren<T> (DependencyObject parent) where T : DependencyObject {
+            if (parent == null)
+                yield break;
+
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++) {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                T match = child as T;
+                if (match != null)
+                    yield return match;
+
+                foreach (T nested in FindVisualChildren<T>(child))
+                    yield return nested;
+            }
+        }
     }
 }

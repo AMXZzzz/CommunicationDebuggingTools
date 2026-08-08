@@ -20,6 +20,8 @@
                 <ResourceDictionary Source="Resources/Styles/Navigation.xaml"/>
                 <!-- 加载滚动条样式 -->
                 <ResourceDictionary Source="Resources/Styles/ScrollBar.xaml"/>
+                <!-- 加载勾选框样式 -->
+                <ResourceDictionary Source="Resources/Styles/CheckBox.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

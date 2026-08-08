@@ -1,7 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -12,14 +11,18 @@ using CommunicationDebuggingTools.Services;
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
     /// PLC 设备卡片。
-    /// 通过依赖属性 <see cref="Device"/> 接收数据；文本类字段由 XAML 绑定，
-    /// 状态灯 / 主按钮样式由 <see cref="ApplyStatusVisual"/> 根据 StatusType 更新。
+    /// 数据来自依赖属性 <see cref="Device"/>；文本由 XAML 绑定；
+    /// 状态灯/主按钮由 <see cref="ApplyStatusVisual"/> 更新；
+    /// 多选时通过 <see cref="SetSelectionMode"/> 显示隐藏 CheckBox。
     /// </summary>
     public partial class DeviceCard : UserControl {
-        /// <summary>当前订阅了 PropertyChanged 的设备（用于取消旧订阅）。</summary>
+        /// <summary>当前已订阅 PropertyChanged 的设备。</summary>
         private DeviceInfo _subscribed;
 
-        /// <summary>绑定到卡片的设备数据。</summary>
+        /// <summary>勾选变化（设备 Id, 是否选中）。页面侧可选使用。</summary>
+        public event Action<string, bool> SelectionChanged;
+
+        /// <summary>绑定设备数据。</summary>
         public static readonly DependencyProperty DeviceProperty =
             DependencyProperty.Register(
                 "Device",
@@ -27,10 +30,19 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 typeof(DeviceCard),
                 new PropertyMetadata(null, OnDeviceChanged));
 
-        /// <summary>当前设备；与 DataContext 同步，供按钮事件使用。</summary>
+        /// <summary>当前设备。</summary>
         public DeviceInfo Device {
             get { return (DeviceInfo)GetValue(DeviceProperty); }
             set { SetValue(DeviceProperty, value); }
+        }
+
+        /// <summary>是否勾选（多选删除用）。</summary>
+        public bool IsSelected {
+            get { return chkSelect != null && chkSelect.IsChecked == true; }
+            set {
+                if (chkSelect != null)
+                    chkSelect.IsChecked = value;
+            }
         }
 
         public DeviceCard () {
@@ -46,8 +58,28 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         /// <summary>
-        /// 卡片从可视树移除时取消对 DeviceInfo 的订阅，避免旧卡片被属性通知拖住。
+        /// 多选模式：显示或隐藏勾选框；退出时清空勾选。
         /// </summary>
+        public void SetSelectionMode (bool enabled) {
+            if (chkSelect == null)
+                return;
+
+            chkSelect.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            if (!enabled)
+                chkSelect.IsChecked = false;
+        }
+
+        /// <summary>CheckBox 勾选变化。</summary>
+        private void ChkSelect_Changed (object sender, RoutedEventArgs e) {
+            DeviceInfo info = Device;
+            if (info == null || string.IsNullOrEmpty(info.Id))
+                return;
+
+            if (SelectionChanged != null)
+                SelectionChanged(info.Id, IsSelected);
+        }
+
+        /// <summary>卸下时取消 PropertyChanged 订阅。</summary>
         private void DeviceCard_Unloaded (object sender, RoutedEventArgs e) {
             if (_subscribed != null) {
                 _subscribed.PropertyChanged -= Device_PropertyChanged;
@@ -56,18 +88,15 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
             Unloaded -= DeviceCard_Unloaded;
         }
-        /// <summary>
-        /// Device 依赖属性变更：设置 DataContext 供 {Binding}，并订阅状态通知。
-        /// </summary>
+
+        /// <summary>Device 变更：设置 DataContext 并订阅状态。</summary>
         private static void OnDeviceChanged (DependencyObject d, DependencyPropertyChangedEventArgs e) {
             var card = (DeviceCard)d;
             card.DataContext = e.NewValue;
             card.ApplyDevice(e.NewValue as DeviceInfo);
         }
 
-        /// <summary>
-        /// 切换数据源：取消旧订阅、订阅新设备，并刷新状态外观。
-        /// </summary>
+        /// <summary>切换数据源并刷新状态外观。</summary>
         private void ApplyDevice (DeviceInfo info) {
             if (_subscribed != null)
                 _subscribed.PropertyChanged -= Device_PropertyChanged;
@@ -80,10 +109,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             }
         }
 
-        /// <summary>
-        /// 设备属性变化时，仅在状态相关字段变化时更新灯与主按钮。
-        /// Name/Ip 等已由绑定自动刷新，无需整卡重绑。
-        /// </summary>
+        /// <summary>仅状态相关属性变化时更新灯与按钮。</summary>
         private void Device_PropertyChanged (object sender, PropertyChangedEventArgs e) {
             if (e.PropertyName == "StatusType" ||
                 e.PropertyName == "StatusText" ||
@@ -93,17 +119,14 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             }
         }
 
-        /// <summary>强制按当前 Device 刷新状态外观（一般可依赖 PropertyChanged）。</summary>
+        /// <summary>强制按当前 Device 刷新外观。</summary>
         public void RefreshFromDevice () {
             ApplyDevice(Device);
         }
 
-        /// <summary>
-        /// 将 StatusType 映射为文案 Key，再交给 SetStatus 更新灯、色条、主按钮。
-        /// </summary>
+        /// <summary>StatusType → 状态 Key，再交给 SetStatus。</summary>
         private void ApplyStatusVisual (DeviceStatusType type) {
             string statusKey;
-
             switch (type) {
                 case DeviceStatusType.Success:
                     statusKey = "Success";
@@ -122,14 +145,11 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                     break;
             }
 
-            // 文案以绑定 StatusText 为准；这里再写一次保证未绑定时也有显示
             string statusText = Device != null ? Device.StatusText : "离线";
             SetStatus(statusText, statusKey);
         }
 
-        /// <summary>
-        /// 更新状态文字颜色、状态灯、左侧色条、主按钮 Content/Style。
-        /// </summary>
+        /// <summary>更新状态文案色、灯、色条、主按钮。</summary>
         public void SetStatus (string statusText, string statusType) {
             if (plcCurrentState != null)
                 plcCurrentState.Text = statusText;
@@ -143,7 +163,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                         btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
                     }
                     break;
-
                 case "Warning":
                     brush = (Brush)FindResource("SF.Brush.Status.Warning");
                     if (btnPrimary != null) {
@@ -151,7 +170,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                         btnPrimary.Style = (Style)FindResource("SF.Style.DangerButton");
                     }
                     break;
-
                 case "Error":
                     brush = (Brush)FindResource("SF.Brush.Status.Error");
                     if (btnPrimary != null) {
@@ -159,7 +177,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                         btnPrimary.Style = (Style)FindResource("SF.Style.PrimaryButton");
                     }
                     break;
-
                 default:
                     brush = (Brush)FindResource("SF.Brush.Text.Secondary");
                     if (btnPrimary != null) {
@@ -188,22 +205,17 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 page.OpenEditDevice(info);
         }
 
-        /// <summary>
-        /// 连接 / 断开 / 重连。
-        /// 连接使用 ConnectAsync，不阻塞 UI；状态变化通过 PropertyChanged 刷新外观。
-        /// </summary>
+        /// <summary>连接 / 断开 / 重连（异步，不阻塞 UI）。</summary>
         private async void BtnPrimary_Click (object sender, RoutedEventArgs e) {
             DeviceInfo info = Device;
             if (info == null || string.IsNullOrEmpty(info.Id))
                 return;
 
-            // 已连接或连接中 → 断开
             if (info.IsConnected || info.StatusType == DeviceStatusType.Connecting) {
                 MyAppServices.Devices.Disconnect(info.Id);
                 return;
             }
 
-            // 先进入连接中（触发绑定与本卡订阅）
             info.StatusType = DeviceStatusType.Connecting;
             info.IsConnected = false;
 
@@ -225,9 +237,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             }
         }
 
-        /// <summary>
-        /// 沿可视化树向上查找所属 <see cref="DevicePage"/>。
-        /// </summary>
+        /// <summary>向上查找所属 DevicePage。</summary>
         private static DevicePage FindParentPage (DependencyObject d) {
             while (d != null) {
                 DevicePage page = d as DevicePage;

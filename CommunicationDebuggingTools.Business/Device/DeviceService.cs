@@ -31,6 +31,13 @@ namespace CommunicationDebuggingTools.Business.Device {
             new Dictionary<string, IProtocol>();
 
         /// <summary>
+        /// 设备 Id 到当前正在进行的 ConnectAsync 所对应取消令牌源的映射。
+        /// 用于在“取消/断开”时真正中止尚未完成的连接过程，而不仅仅是重置界面状态。
+        /// </summary>
+
+        private readonly Dictionary<string, CancellationTokenSource> _connectCts =
+            new Dictionary<string, CancellationTokenSource>();
+        /// <summary>
         /// 当前已加载的设备集合，供 UI 直接绑定。集合内容变化（增/删/改）会自动驱动界面刷新。
         /// </summary>
         public ObservableCollection<DeviceInfo> Devices { get; private set; }
@@ -58,6 +65,8 @@ namespace CommunicationDebuggingTools.Business.Device {
         /// 避免界面显示上次保存时的连接状态这种误导性信息。
         /// </summary>
         public void Load () {
+
+            DisconnectAll();
             Devices.Clear();
 
             IList<DeviceInfo> list = _repository.LoadAll();
@@ -179,29 +188,47 @@ namespace CommunicationDebuggingTools.Business.Device {
             if (device.IsConnected)
                 return true;
 
-            // 先标连接中（调用方在 UI 线程时，这里也是 UI 线程）
+            // 取消该设备上一次未完成的连接
+            CancelConnect(id);
+
+            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _connectCts[id] = linkedCts;
+            CancellationToken ct = linkedCts.Token;
+
             device.StatusType = DeviceStatusType.Connecting;
+            device.IsConnected = false;
 
-            bool reachable = await TcpProbe.IsPortOpenAsync(device.Ip, device.Port, 1000, cancellationToken);
-
-
-            if (!reachable) {
-                device.IsConnected = false;
-                device.StatusType = DeviceStatusType.Offline;
-                return false;
-            }
-
-            IProtocol protocol = _resolver.Resolve(device.Protocol);
-            if (protocol == null) {
-                device.IsConnected = false;
-                device.StatusType = DeviceStatusType.Error;
-                return false;
-            }
+            IProtocol protocol = null;
 
             try {
-                bool ok = await protocol
-            .ConnectAsync(device.Ip, device.Port, device.UnitId, cancellationToken);
-                // 不要 ConfigureAwait(false)
+                bool reachable = await TcpProbe.IsPortOpenAsync(
+            device.Ip, device.Port, 1000, ct);
+
+                if (!reachable) {
+                    device.IsConnected = false;
+                    device.StatusType = DeviceStatusType.Offline;
+                    return false;
+                }
+
+                ct.ThrowIfCancellationRequested();
+
+                protocol = _resolver.Resolve(device.Protocol);
+                if (protocol == null) {
+                    device.IsConnected = false;
+                    device.StatusType = DeviceStatusType.Error;
+                    return false;
+                }
+
+                bool ok = await protocol.ConnectAsync(
+            device.Ip, device.Port, device.UnitId, ct);
+
+                // 用户已点取消：不写入 session、不标成功
+                if (ct.IsCancellationRequested) {
+                    SafeDisconnectProtocol(protocol);
+                    device.IsConnected = false;
+                    device.StatusType = DeviceStatusType.Offline;
+                    return false;
+                }
 
                 if (ok) {
                     _sessions[id] = protocol;
@@ -212,18 +239,43 @@ namespace CommunicationDebuggingTools.Business.Device {
                     device.IsConnected = false;
                     device.StatusType = DeviceStatusType.Error;
                 }
+
                 return ok;
             } catch (OperationCanceledException) {
-                SafeDisconnectProtocol(protocol);
+                if (protocol != null)
+                    SafeDisconnectProtocol(protocol);
                 device.IsConnected = false;
                 device.StatusType = DeviceStatusType.Offline;
                 return false;
             } catch {
-                SafeDisconnectProtocol(protocol);
+                if (protocol != null)
+                    SafeDisconnectProtocol(protocol);
                 device.IsConnected = false;
                 device.StatusType = DeviceStatusType.Error;
                 return false;
+            } finally {
+                CancellationTokenSource existing;
+                if (_connectCts.TryGetValue(id, out existing) && existing == linkedCts) {
+                    _connectCts.Remove(id);
+                    linkedCts.Dispose();
+                }
             }
+        }
+
+        /// <summary>
+        /// 取消指定设备当前正在进行的连接操作（若有），并释放对应的取消令牌源。
+        /// </summary>
+        /// <param name="id"></param>
+        private void CancelConnect (string id) {
+            CancellationTokenSource cts;
+            if (!_connectCts.TryGetValue(id, out cts))
+                return;
+
+            try { cts.Cancel(); } catch { }
+
+            _connectCts.Remove(id);
+
+            try { cts.Dispose(); } catch { }
         }
 
         /// <summary>
@@ -234,6 +286,9 @@ namespace CommunicationDebuggingTools.Business.Device {
         public void Disconnect (string id) {
             if (string.IsNullOrEmpty(id))
                 return;
+
+            // 若该设备当前有正在进行的连接尝试，先取消它，确保"取消"操作真正生效
+            CancelConnect(id);
 
             IProtocol protocol;
             if (_sessions.TryGetValue(id, out protocol)) {
@@ -252,8 +307,14 @@ namespace CommunicationDebuggingTools.Business.Device {
         /// 一次性断开所有设备的通信连接并释放底层协议资源。
         /// </summary>
         public void DisconnectAll () {
-            foreach (var id in _sessions.Keys.ToList())
+            foreach (string id in Devices.Select(d => d.Id).Where(x => !string.IsNullOrEmpty(x)).ToList())
                 Disconnect(id);
+
+            // 兜底：集合里没有、但 session/cts 里还有的
+            foreach (string id in _sessions.Keys.ToList())
+                Disconnect(id);
+            foreach (string id in _connectCts.Keys.ToList())
+                CancelConnect(id);
         }
 
         /// <summary>
