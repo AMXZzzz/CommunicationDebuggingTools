@@ -42,13 +42,24 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Enums\DataOrder.cs" />
+    <Compile Include="Enums\DataQuality.cs" />
     <Compile Include="Enums\DeviceStatusType.cs" />
+    <Compile Include="Enums\StringEncodingKind.cs" />
+    <Compile Include="Enums\VariableAccess.cs" />
+    <Compile Include="Enums\VariableDataType.cs" />
     <Compile Include="Interfaces\IDeviceRepository.cs" />
     <Compile Include="Interfaces\IDeviceService.cs" />
     <Compile Include="Interfaces\IProtocol.cs" />
     <Compile Include="Enums\LaneType.cs" />
+    <Compile Include="Interfaces\IProtocolCapabilities.cs" />
+    <Compile Include="Interfaces\IProtocolDataAccess.cs" />
     <Compile Include="Interfaces\IProtocolResolver.cs" />
+    <Compile Include="Models\ConnectionFieldSpec.cs" />
     <Compile Include="Models\DeviceInfo.cs" />
+    <Compile Include="Models\ProtocolConnectionContext.cs" />
+    <Compile Include="Models\ProtocolDataMessage.cs" />
+    <Compile Include="Models\ValidationResult.cs" />
+    <Compile Include="Models\VariableItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

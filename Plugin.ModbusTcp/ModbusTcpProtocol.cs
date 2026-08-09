@@ -1,5 +1,6 @@
 ﻿using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Models;
 using System;
 using System.Net.Sockets;
 using System.Text;
@@ -46,37 +47,39 @@ namespace Plugin.ModbusTcp {
         }
 
         // ==================== 连接 ====================
-
         /// <summary>
-        /// 建立到 Modbus TCP 从站的连接。会先断开旧连接再重新建立，保证幂等。
-        /// 使用异步 BeginConnect + WaitOne 实现带超时的连接尝试，避免 IP 不可达时长时间阻塞。
+        /// 使用共性连接上下文建立 Modbus TCP 会话。
+        /// unitId 只从 <paramref name="context"/>.ProtocolSettingsJson 解析，不使用其它入口。
         /// </summary>
-        /// <param name="ip">从站 IP 地址。</param>
-        /// <param name="port">从站端口（Modbus TCP 默认 502）。</param>
-        /// <param name="unitId">从站地址（Unit Id），会被截断到 0~255 范围。</param>
-        /// <returns>是否连接成功。</returns>
-        public async Task<bool> ConnectAsync (string ip, int port, int unitId, CancellationToken cancellationToken) {
+        public async Task<bool> ConnectAsync (
+            ProtocolConnectionContext context,
+            CancellationToken cancellationToken) {
+            if (context == null)
+                throw new ArgumentNullException("context");
+
             Disconnect();
 
-            if (string.IsNullOrWhiteSpace(ip))
+            if (string.IsNullOrWhiteSpace(context.Ip))
                 return false;
 
-            _unitId = (byte)(unitId < 0 ? 0 : (unitId > 255 ? 255 : unitId));
+            // 协议私有参数：仅本插件理解 unitId
+            _unitId = (byte)ParseUnitId(context.ProtocolSettingsJson);
+            _timeoutMs = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
 
             try {
                 _tcp = new TcpClient();
 
-                Task connectTask = _tcp.ConnectAsync(ip, port);
+                Task connectTask = _tcp.ConnectAsync(context.Ip, context.Port);
                 Task timeoutTask = Task.Delay(_timeoutMs, cancellationToken);
 
-                Task finished = await Task.WhenAny(connectTask, timeoutTask).ConfigureAwait(false);
-
+                Task finished = await Task.WhenAny(connectTask, timeoutTask);
                 if (finished != connectTask) {
+                    // 超时或取消
                     Disconnect();
                     return false;
                 }
 
-                await connectTask.ConfigureAwait(false);
+                await connectTask;
 
                 if (!_tcp.Connected || cancellationToken.IsCancellationRequested) {
                     Disconnect();
@@ -91,6 +94,46 @@ namespace Plugin.ModbusTcp {
                 Disconnect();
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 从 ProtocolSettingsJson 读取 unitId。
+        /// 合法范围限制在 0–255；缺失或解析失败时默认 1。
+        /// 仅 Modbus 插件使用，Core 不解析 JSON。
+        /// </summary>
+        private static int ParseUnitId (string protocolSettingsJson) {
+            if (string.IsNullOrWhiteSpace(protocolSettingsJson))
+                return 1;
+
+            try {
+                int i = protocolSettingsJson.IndexOf("unitId", StringComparison.OrdinalIgnoreCase);
+                if (i < 0)
+                    return 1;
+
+                int colon = protocolSettingsJson.IndexOf(':', i);
+                if (colon < 0)
+                    return 1;
+
+                int start = colon + 1;
+                while (start < protocolSettingsJson.Length &&
+                       (protocolSettingsJson[start] == ' ' || protocolSettingsJson[start] == '\"'))
+                    start++;
+
+                int end = start;
+                while (end < protocolSettingsJson.Length && char.IsDigit(protocolSettingsJson[end]))
+                    end++;
+
+                int v;
+                if (int.TryParse(protocolSettingsJson.Substring(start, end - start), out v)) {
+                    if (v < 0) return 0;
+                    if (v > 255) return 255;
+                    return v;
+                }
+            } catch {
+                // 忽略，走默认
+            }
+
+            return 1;
         }
 
         /// <summary>
