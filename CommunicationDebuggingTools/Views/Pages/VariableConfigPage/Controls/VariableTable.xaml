@@ -35,22 +35,19 @@
                 BorderThickness="0,1,0,0" Padding="16,8">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="txtFtAll" Text="共 0 个变量" FontSize="11"
-                               Foreground="{StaticResource SF.Brush.Text.Secondary}" Margin="0,0,16,0"/>
-                    <TextBlock x:Name="txtFtRead" Text="只读 0" FontSize="11"
-                               Foreground="{StaticResource SF.Brush.Text.Secondary}" Margin="0,0,16,0"/>
-                    <TextBlock x:Name="txtFtWrite" Text="可写 0" FontSize="11"
-                               Foreground="{StaticResource SF.Brush.Text.Secondary}" Margin="0,0,16,0"/>
-                    <TextBlock x:Name="txtFtLive" Text="" FontSize="11"
-                               Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
+                    <TextBlock x:Name="txtFtAll" Text="共 0 个变量"
+                               Style="{StaticResource SF.Style.VarFooterText}" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="txtFtRead" Text="只读 0"
+                               Style="{StaticResource SF.Style.VarFooterText}" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="txtFtWrite" Text="可写 0"
+                               Style="{StaticResource SF.Style.VarFooterText}" Margin="0,0,16,0"/>
+                    <TextBlock x:Name="txtFtLive" Text=""
+                               Style="{StaticResource SF.Style.VarFooterText}"/>
                 </StackPanel>
-                <Button x:Name="btnHint" Content="^" Width="28" Height="22"
-                        HorizontalAlignment="Right" Cursor="Hand"
-                        FocusVisualStyle="{x:Null}"
-                        Background="{StaticResource SF.Brush.Bg.Hover}"
-                        Foreground="{StaticResource SF.Brush.Text.Secondary}"
-                        BorderBrush="{StaticResource SF.Brush.Border.Default}"
-                        BorderThickness="1" Click="BtnHint_Click" ToolTip="读写说明"/>
+                <Button x:Name="btnHint" Content="^"
+                        HorizontalAlignment="Right"
+                        Style="{StaticResource SF.Style.VarHintToggleBtn}"
+                        Click="BtnHint_Click" ToolTip="读写说明"/>
             </Grid>
         </Border>
 
@@ -95,25 +92,20 @@
                             <ColumnDefinition Width="76"/>
                             <ColumnDefinition Width="64"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="#" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="1" Text="显示名称" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="2" Text="地址" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="3" Text="类型" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="4" Text="读写" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="5" Text="实时值" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="6" Text="单位" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="7" Text="分类" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
-                        <TextBlock Grid.Column="8" Text="操作" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
+                        <TextBlock Text="#" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="1" Text="显示名称" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="2" Text="地址" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="3" Text="类型" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="4" Text="读写" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="5" Text="实时值" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="6" Text="单位" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="7" Text="分类" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="8" Text="操作" Style="{StaticResource SF.Style.VarHeaderText}"/>
                     </Grid>
                 </Border>
 
-                <ItemsControl x:Name="listRows" Focusable="False" FocusVisualStyle="{x:Null}">
-                    <ItemsControl.ItemContainerStyle>
-                        <Style TargetType="ContentPresenter">
-                            <Setter Property="Focusable" Value="False"/>
-                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                        </Style>
-                    </ItemsControl.ItemContainerStyle>
+                <ItemsControl x:Name="listRows" Focusable="False" FocusVisualStyle="{x:Null}"
+                              ItemContainerStyle="{StaticResource SF.Style.VarRowPresenter}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border BorderBrush="{StaticResource SF.Brush.Var.PanelBorder}"
@@ -122,15 +114,7 @@
                                     ToolTipService.ShowDuration="20000"
                                     ToolTipService.BetweenShowDelay="200">
                                 <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background"
-                                                        Value="{StaticResource SF.Brush.Var.RowHover}"/>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
+                                    <StaticResource ResourceKey="SF.Style.VarRowBorder"/>
                                 </Border.Style>
                                 <Border.ToolTip>
                                     <ToolTip Style="{StaticResource SF.Style.VarRowToolTip}"
@@ -171,90 +155,20 @@
                                     <Border Grid.Column="3" CornerRadius="3" Padding="6,2"
                                             HorizontalAlignment="Left" VerticalAlignment="Center">
                                         <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Background" Value="{StaticResource SF.Brush.Bg.Hover}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding DataType}" Value="Bool">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Type.Bool.Bg}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataType}" Value="Int16">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Type.Int16.Bg}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataType}" Value="Int32">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Type.Int32.Bg}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataType}" Value="Float">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Type.Float.Bg}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataType}" Value="Double">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Type.Double.Bg}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding DataType}" Value="String">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Type.String.Bg}"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="SF.Style.VarTypeBadgeBorder"/>
                                         </Border.Style>
-                                        <TextBlock Text="{Binding DataType}" FontSize="11">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="{StaticResource SF.Brush.Text.Primary}"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding DataType}" Value="Bool">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Type.Bool.Fg}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding DataType}" Value="Int16">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Type.Int16.Fg}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding DataType}" Value="Int32">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Type.Int32.Fg}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding DataType}" Value="Float">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Type.Float.Fg}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding DataType}" Value="Double">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Type.Double.Fg}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding DataType}" Value="String">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Type.String.Fg}"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
+                                        <TextBlock Text="{Binding DataType}" FontSize="11"
+                                                   Style="{StaticResource SF.Style.VarTypeBadgeText}"/>
                                     </Border>
 
                                     <!-- 读写徽章 -->
                                     <Border Grid.Column="4" CornerRadius="3" Padding="6,2"
                                             HorizontalAlignment="Left" VerticalAlignment="Center">
                                         <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Access.RW.Bg}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding AccessText}" Value="R">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Access.R.Bg}"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding AccessText}" Value="W">
-                                                        <Setter Property="Background" Value="{StaticResource SF.Brush.Var.Access.W.Bg}"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="SF.Style.VarAccessBadgeBorder"/>
                                         </Border.Style>
-                                        <TextBlock Text="{Binding AccessText}" FontSize="10" FontWeight="SemiBold">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Access.RW.Fg}"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding AccessText}" Value="R">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Access.R.Fg}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding AccessText}" Value="W">
-                                                            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Var.Access.W.Fg}"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
+                                        <TextBlock Text="{Binding AccessText}" FontSize="10" FontWeight="SemiBold"
+                                                   Style="{StaticResource SF.Style.VarAccessBadgeText}"/>
                                     </Border>
 
                                     <!-- 实时值 / 写入 -->

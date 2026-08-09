@@ -132,6 +132,9 @@
     <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableTable.xaml.cs">
       <DependentUpon>VariableTable.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Resources\Styles\VariableTableStyles.xaml.cs">
+      <DependentUpon>VariableTableStyles.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\Pages\VariableConfigPage\VariableConfigPage.xaml.cs">
       <DependentUpon>VariableConfigPage.xaml</DependentUpon>
     </Compile>
@@ -185,6 +188,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Resources\Styles\TextBox.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Resources\Styles\VariableTableStyles.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

@@ -40,9 +40,13 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
         public void Add (VariableItem item) {
             if (item == null) throw new ArgumentNullException(nameof(item));
-            if (string.IsNullOrEmpty(item.Id))
+
+            Normalize(item);
+            ValidateForUpsert(item, null);
+
+            if (string.IsNullOrWhiteSpace(item.Id))
                 item.Id = Guid.NewGuid().ToString("N");
-            if (Variables.Any(x => x.Id == item.Id))
+            if (Variables.Any(x => x != null && x.Id == item.Id))
                 throw new InvalidOperationException("变量 Id 已存在: " + item.Id);
 
             Variables.Add(item);
@@ -51,7 +55,10 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
         public void Update (VariableItem item) {
             if (item == null) throw new ArgumentNullException(nameof(item));
+
+            Normalize(item);
             VariableItem old = FindRequired(item.Id);
+            ValidateForUpsert(item, item.Id);
 
             old.DeviceId = item.DeviceId;
             old.Name = item.Name;
@@ -91,7 +98,18 @@ namespace CommunicationDebuggingTools.Business.Variable {
             }
 
             ProtocolDataMessage msg = BuildMessage(v, device, null);
-            ProtocolDataMessage result = await access.ReadAsync(msg, cancellationToken);
+            ProtocolDataMessage result;
+            try {
+                result = await access.ReadAsync(msg, cancellationToken);
+            } catch (InvalidOperationException ex) {
+                v.LastError = ex.Message;
+                v.Quality = DataQuality.Bad;
+                return false;
+            } catch (TimeoutException ex) {
+                v.LastError = ex.Message;
+                v.Quality = DataQuality.Bad;
+                return false;
+            }
 
             v.LastError = result.ErrorMessage ?? "";
             v.Quality = result.Quality;
@@ -122,7 +140,18 @@ namespace CommunicationDebuggingTools.Business.Variable {
             }
 
             ProtocolDataMessage msg = BuildMessage(v, device, value);
-            ProtocolDataMessage result = await access.WriteAsync(msg, cancellationToken);
+            ProtocolDataMessage result;
+            try {
+                result = await access.WriteAsync(msg, cancellationToken);
+            } catch (InvalidOperationException ex) {
+                v.LastError = ex.Message;
+                v.Quality = DataQuality.Bad;
+                return false;
+            } catch (TimeoutException ex) {
+                v.LastError = ex.Message;
+                v.Quality = DataQuality.Bad;
+                return false;
+            }
 
             v.LastError = result.ErrorMessage ?? "";
             if (result.Success) {
@@ -189,10 +218,46 @@ namespace CommunicationDebuggingTools.Business.Variable {
             };
         }
 
+        private void ValidateForUpsert (VariableItem item, string currentId) {
+            if (string.IsNullOrWhiteSpace(item.DeviceId))
+                throw new ArgumentException("设备 Id 不能为空", nameof(item));
+
+            if (string.IsNullOrWhiteSpace(item.Name))
+                throw new ArgumentException("变量名称不能为空", nameof(item));
+
+            if (string.IsNullOrWhiteSpace(item.Address))
+                throw new ArgumentException("变量地址不能为空", nameof(item));
+
+            bool hasDevice = _devices.Devices.Any(d => d != null && d.Id == item.DeviceId);
+            if (!hasDevice)
+                throw new InvalidOperationException("设备不存在: " + item.DeviceId);
+
+            bool duplicated = Variables.Any(v =>
+                v != null &&
+                !string.Equals(v.Id, currentId, StringComparison.Ordinal) &&
+                string.Equals(v.DeviceId, item.DeviceId, StringComparison.Ordinal) &&
+                string.Equals(v.Address, item.Address, StringComparison.OrdinalIgnoreCase));
+            if (duplicated)
+                throw new InvalidOperationException("同设备下变量地址重复: " + item.Address);
+        }
+
+        private static void Normalize (VariableItem item) {
+            item.Id = string.IsNullOrWhiteSpace(item.Id) ? item.Id : item.Id.Trim();
+            item.DeviceId = (item.DeviceId ?? string.Empty).Trim();
+            item.Name = (item.Name ?? string.Empty).Trim();
+            item.Address = (item.Address ?? string.Empty).Trim();
+            item.Unit = (item.Unit ?? string.Empty).Trim();
+            item.Category = string.IsNullOrWhiteSpace(item.Category)
+                ? "状态点"
+                : item.Category.Trim();
+            item.Description = (item.Description ?? string.Empty).Trim();
+        }
+
         private VariableItem FindRequired (string id) {
-            if (string.IsNullOrEmpty(id))
-                throw new ArgumentException("Id 不能为空");
-            VariableItem v = Variables.FirstOrDefault(x => x.Id == id);
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Id 不能为空", nameof(id));
+
+            VariableItem v = Variables.FirstOrDefault(x => x != null && x.Id == id);
             if (v == null)
                 throw new InvalidOperationException("变量不存在: " + id);
             return v;

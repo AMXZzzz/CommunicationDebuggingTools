@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -35,6 +37,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             deviceList.DeviceSelected += OnDeviceSelected;
             variableTable.VariablesChanged += () => deviceList.Reload();
             variableTable.EditRequested += OpenEdit;
+            variableTable.WriteRequested += OnVariableWriteRequested;
 
             deviceHeader.AddClicked += OpenAdd;
             deviceHeader.BatchAddClicked += OpenBatch;
@@ -249,17 +252,159 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private void OnMessageSecondary () {
+            if (string.IsNullOrEmpty(_lastExportPath))
+                return;
+
+            string dir = Path.GetDirectoryName(_lastExportPath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) {
+                ShowInfo("提示", "目录不存在或已被删除");
+                return;
+            }
+
             try {
-                if (string.IsNullOrEmpty(_lastExportPath))
-                    return;
-                string dir = Path.GetDirectoryName(_lastExportPath);
-                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) {
-                    Process.Start(new ProcessStartInfo {
-                        FileName = dir,
-                        UseShellExecute = true
-                    });
-                }
-            } catch { }
+                Process.Start(new ProcessStartInfo {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            } catch (InvalidOperationException ex) {
+                ShowInfo("打开目录失败", ex.Message);
+            } catch (System.ComponentModel.Win32Exception ex) {
+                ShowInfo("打开目录失败", ex.Message);
+            }
+        }
+
+        private async void OnVariableWriteRequested (string variableId, string writeText) {
+            if (string.IsNullOrWhiteSpace(variableId) || MyAppServices.Variables == null)
+                return;
+
+            VariableItem variable = MyAppServices.Variables.Variables
+                .FirstOrDefault(v => v != null && v.Id == variableId);
+            if (variable == null) {
+                ShowInfo("写入失败", "变量不存在");
+                return;
+            }
+
+            if (!TryParseWriteValue(variable.DataType, writeText, out object value, out string parseError)) {
+                ShowInfo("写入失败", parseError);
+                return;
+            }
+
+            bool ok;
+            try {
+                ok = await MyAppServices.Variables
+                    .WriteAsync(variableId, value, CancellationToken.None);
+            } catch (ArgumentException ex) {
+                ShowInfo("写入失败", ex.Message);
+                return;
+            } catch (InvalidOperationException ex) {
+                ShowInfo("写入失败", ex.Message);
+                return;
+            }
+
+            if (!ok) {
+                string error = string.IsNullOrWhiteSpace(variable.LastError)
+                    ? "写入未成功"
+                    : variable.LastError;
+                ShowInfo("写入失败", error);
+            }
+
+            RefreshList();
+        }
+
+        private static bool TryParseWriteValue (
+            Core.Enums.VariableDataType dataType,
+            string raw,
+            out object value,
+            out string error) {
+            string text = (raw ?? string.Empty).Trim();
+            value = null;
+            error = null;
+
+            switch (dataType) {
+                case Core.Enums.VariableDataType.Bool:
+                    if (text == "1" || text.Equals("true", StringComparison.OrdinalIgnoreCase)) {
+                        value = true;
+                        return true;
+                    }
+                    if (text == "0" || text.Equals("false", StringComparison.OrdinalIgnoreCase)) {
+                        value = false;
+                        return true;
+                    }
+                    error = "Bool 类型仅支持 true/false 或 1/0";
+                    return false;
+
+                case Core.Enums.VariableDataType.Int16:
+                    if (short.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out short i16)) {
+                        value = i16;
+                        return true;
+                    }
+                    error = "Int16 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.UInt16:
+                    if (ushort.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort u16)) {
+                        value = u16;
+                        return true;
+                    }
+                    error = "UInt16 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Int32:
+                    if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i32)) {
+                        value = i32;
+                        return true;
+                    }
+                    error = "Int32 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.UInt32:
+                    if (uint.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint u32)) {
+                        value = u32;
+                        return true;
+                    }
+                    error = "UInt32 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Int64:
+                    if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long i64)) {
+                        value = i64;
+                        return true;
+                    }
+                    error = "Int64 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.UInt64:
+                    if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ulong u64)) {
+                        value = u64;
+                        return true;
+                    }
+                    error = "UInt64 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Float:
+                    if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float f)) {
+                        value = f;
+                        return true;
+                    }
+                    error = "Float 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Double:
+                    if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double d)) {
+                        value = d;
+                        return true;
+                    }
+                    error = "Double 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.String:
+                    value = text;
+                    return true;
+
+                default:
+                    value = text;
+                    return true;
+            }
         }
 
         private void OnPanelInfo (string title, string message) =>

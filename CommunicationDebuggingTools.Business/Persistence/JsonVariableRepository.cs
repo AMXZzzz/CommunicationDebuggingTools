@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Web.Script.Serialization;
 using CommunicationDebuggingTools.Core.Enums;
@@ -27,15 +28,24 @@ namespace CommunicationDebuggingTools.Business.Persistence {
 
         /// <summary>从磁盘加载；文件不存在或损坏时返回空列表。</summary>
         public IList<VariableItem> LoadAll () {
+            if (!File.Exists(_filePath))
+                return new List<VariableItem>();
+
+            string json;
             try {
-                if (!File.Exists(_filePath))
-                    return new List<VariableItem>();
+                json = File.ReadAllText(_filePath);
+            } catch (IOException ex) {
+                Trace.TraceError("读取变量配置失败: {0}", ex.Message);
+                return new List<VariableItem>();
+            } catch (UnauthorizedAccessException ex) {
+                Trace.TraceError("读取变量配置失败: {0}", ex.Message);
+                return new List<VariableItem>();
+            }
 
-                string json = File.ReadAllText(_filePath);
-                if (string.IsNullOrWhiteSpace(json))
-                    return new List<VariableItem>();
+            if (string.IsNullOrWhiteSpace(json))
+                return new List<VariableItem>();
 
-                // 使用 DTO 避免反序列化事件字段等问题
+            try {
                 List<VariableDto> dtos = _serializer.Deserialize<List<VariableDto>>(json);
                 if (dtos == null)
                     return new List<VariableItem>();
@@ -46,30 +56,51 @@ namespace CommunicationDebuggingTools.Business.Persistence {
                     list.Add(FromDto(d));
                 }
                 return list;
-            } catch {
+            } catch (InvalidOperationException ex) {
+                Trace.TraceError("解析变量配置失败: {0}", ex.Message);
+                return new List<VariableItem>();
+            } catch (ArgumentException ex) {
+                Trace.TraceError("解析变量配置失败: {0}", ex.Message);
                 return new List<VariableItem>();
             }
         }
 
         /// <summary>整体覆盖写入。</summary>
         public void SaveAll (IList<VariableItem> items) {
-            try {
-                string dir = Path.GetDirectoryName(_filePath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
+            string dir = Path.GetDirectoryName(_filePath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
 
-                var dtos = new List<VariableDto>();
-                if (items != null) {
-                    foreach (VariableItem v in items) {
-                        if (v == null) continue;
-                        dtos.Add(ToDto(v));
+            var dtos = new List<VariableDto>();
+            if (items != null) {
+                foreach (VariableItem v in items) {
+                    if (v == null) continue;
+                    dtos.Add(ToDto(v));
+                }
+            }
+
+            string json = _serializer.Serialize(dtos);
+            string tempPath = _filePath + ".tmp";
+
+            try {
+                File.WriteAllText(tempPath, json);
+                if (File.Exists(_filePath))
+                    File.Delete(_filePath);
+                File.Move(tempPath, _filePath);
+            } catch (IOException ex) {
+                Trace.TraceError("保存变量配置失败: {0}", ex.Message);
+            } catch (UnauthorizedAccessException ex) {
+                Trace.TraceError("保存变量配置失败: {0}", ex.Message);
+            } finally {
+                if (File.Exists(tempPath)) {
+                    try {
+                        File.Delete(tempPath);
+                    } catch (IOException ex) {
+                        Trace.TraceError("清理变量配置临时文件失败: {0}", ex.Message);
+                    } catch (UnauthorizedAccessException ex) {
+                        Trace.TraceError("清理变量配置临时文件失败: {0}", ex.Message);
                     }
                 }
-
-                string json = _serializer.Serialize(dtos);
-                File.WriteAllText(_filePath, json);
-            } catch {
-                // 与设备仓储一致：持久化失败不向上抛，避免拖垮 UI
             }
         }
 

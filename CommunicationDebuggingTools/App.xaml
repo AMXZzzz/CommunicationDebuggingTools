@@ -28,6 +28,8 @@
                 <ResourceDictionary Source="Resources/Styles/ComboBox.xaml"/>
                 <!-- 加载文本框样式 -->
                 <ResourceDictionary Source="Resources/Styles/TextBox.xaml"/>
+                <!-- 加载变量表样式 -->
+                <ResourceDictionary Source="Resources/Styles/VariableTableStyles.xaml"/>
                 <!-- 加载图标样式 -->
                 <ResourceDictionary Source="Resources/Styles/Icon.xaml"/>
             </ResourceDictionary.MergedDictionaries>
