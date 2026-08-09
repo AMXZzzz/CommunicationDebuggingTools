@@ -59,6 +59,9 @@ namespace CommunicationDebuggingTools.Business.Variable {
             old.DataType = item.DataType;
             old.Access = item.Access;
             old.Length = item.Length;
+            old.Unit = item.Unit;
+            old.Category = item.Category;
+            old.Description = item.Description;
             Save();
         }
 

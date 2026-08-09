@@ -1,9 +1,13 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- ==================== 侧边栏导航按钮主题 ==================== -->
+    <!--
+      侧边栏导航 RadioButton
+      选中指示条动画依赖 Animations.xaml：
+      SF.Anim.NavIndicatorExpand / SF.Anim.NavIndicatorCollapse
+      （App 中需先合并 Animations，再合并本文件）
+    -->
     <Style x:Key="SF.Style.NavRadioButtonStyle" TargetType="RadioButton">
-        <!-- 公共属性 -->
         <Setter Property="Foreground" Value="{StaticResource SF.Brush.Text.Primary}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -12,8 +16,8 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="16 0"/>
-
+        <Setter Property="Padding" Value="16,0"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
@@ -22,13 +26,10 @@
                             Padding="{TemplateBinding Padding}">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <!-- 指示条列 -->
                                 <ColumnDefinition Width="4"/>
-                                <!-- 文字列 -->
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-
-                            <!-- 左侧垂直指示条（默认隐藏） -->
+                            <!-- 左侧指示条：默认高度 0、透明 -->
                             <Border x:Name="Indicator"
                                     Grid.Column="0"
                                     Width="3"
@@ -37,51 +38,36 @@
                                     Background="{StaticResource SF.Brush.Accent.Default}"
                                     VerticalAlignment="Center"
                                     Opacity="0"/>
-
-                            <!-- 菜单文字呈现区域 -->
                             <ContentPresenter Grid.Column="1"
                                               VerticalAlignment="Center"
                                               HorizontalAlignment="Left"
-                                              Margin="12 0 0 0"/>
+                                              Margin="12,0,0,0"/>
                         </Grid>
                     </Border>
-
                     <ControlTemplate.Triggers>
-                        <!-- 悬停 -->
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="RootBorder" Property="Background"
                                     Value="{StaticResource SF.Brush.Bg.Hover}"/>
                         </Trigger>
-
-                        <!-- 选中 -->
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="RootBorder" Property="Background"
                                     Value="{StaticResource SF.Brush.Bg.Hover}"/>
-                            
-                            <!-- 指示条展开动画 -->
                             <Trigger.EnterActions>
-                                <BeginStoryboard Storyboard="{StaticResource SF.Anim.NavIndicatorExpand}"/>
+                                <BeginStoryboard
+                                    Storyboard="{StaticResource SF.Anim.NavIndicatorExpand}"/>
                             </Trigger.EnterActions>
-                            
-                            <!-- 指示条收起动画 -->
                             <Trigger.ExitActions>
-                                <BeginStoryboard Storyboard="{StaticResource SF.Anim.NavIndicatorCollapse}"/>
+                                <BeginStoryboard
+                                    Storyboard="{StaticResource SF.Anim.NavIndicatorCollapse}"/>
                             </Trigger.ExitActions>
-                            
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-    </Style>
-
-    <Style x:Key="SF.Style.DisconnectButton" TargetType="Button"
-       BasedOn="{StaticResource SF.Style.DarkButton}">
-        <Setter Property="Background" Value="{StaticResource SF.Brush.DisconnectBtn.Bg}"/>
-        <Setter Property="Foreground" Value="{StaticResource SF.Brush.DisconnectBtn.Fg}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource SF.Brush.DisconnectBtn.Border}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Margin" Value="10"/>
     </Style>
 
 </ResourceDictionary>

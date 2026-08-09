@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <UserControl.Resources>
-        <!-- 模板色：变量表专用（可迁入主题字典） -->
+        <!-- ========== 模板色（变量表专用，可迁入主题字典） ========== -->
         <SolidColorBrush x:Key="SF.Brush.Var.Addr" Color="#93C5FD"/>
         <SolidColorBrush x:Key="SF.Brush.Var.TypeBg" Color="#1E3A5F"/>
         <SolidColorBrush x:Key="SF.Brush.Var.TypeFg" Color="#93C5FD"/>
@@ -29,7 +29,31 @@
         <SolidColorBrush x:Key="SF.Brush.Var.WriteBtnBorder" Color="#1E3A5F"/>
         <SolidColorBrush x:Key="SF.Brush.Var.WriteBtnFg" Color="#7DD3FC"/>
         <SolidColorBrush x:Key="SF.Brush.Var.BoolOn" Color="#4ADE80"/>
+        <SolidColorBrush x:Key="SF.Brush.Var.RowHover" Color="#222222"/>
 
+        <!-- 行悬停：用途说明气泡 -->
+        <Style x:Key="SF.Style.VarRowToolTip" TargetType="ToolTip">
+            <Setter Property="Background" Value="{StaticResource SF.Brush.Bg.Surface}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource SF.Brush.Border.Default}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 筛选 Tab -->
         <Style x:Key="SF.Style.VarFilterTab" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource SF.Brush.Text.Secondary}"/>
             <Setter Property="FontSize" Value="13"/>
@@ -59,12 +83,14 @@
             </Setter>
         </Style>
 
+        <!-- 行内编辑 / 删除图标按钮 -->
         <Style x:Key="SF.Style.VarRowIcon" TargetType="Button">
             <Setter Property="Width" Value="26"/>
             <Setter Property="Height" Value="26"/>
             <Setter Property="Margin" Value="0,0,4,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Foreground" Value="{StaticResource SF.Brush.Text.Secondary}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -86,6 +112,7 @@
             </Setter>
         </Style>
 
+        <!-- 「写入」小按钮 -->
         <Style x:Key="SF.Style.VarWriteBtn" TargetType="Button">
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Padding" Value="8,3"/>
@@ -108,12 +135,12 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <!-- Tabs -->
+        <!-- 筛选 Tab -->
         <Border DockPanel.Dock="Top"
                 BorderBrush="{StaticResource SF.Brush.Border.Default}"
                 BorderThickness="0,0,0,1"
                 Background="{StaticResource SF.Brush.Bg.App}">
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+            <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="tabAll" Content="全部 (0)" IsChecked="True"
                              Style="{StaticResource SF.Style.VarFilterTab}"
                              Checked="Filter_Checked" Tag="All"/>
@@ -132,8 +159,8 @@
             </StackPanel>
         </Border>
 
-        <!-- 底栏 -->
-        <Border DockPanel.Dock="Bottom"
+        <!-- 底栏统计 -->
+        <Border DockPanel.Dock="Bottom" CornerRadius="8"
                 Background="{StaticResource SF.Brush.Bg.Surface}"
                 BorderBrush="{StaticResource SF.Brush.Border.Default}"
                 BorderThickness="0,1,0,0"
@@ -158,16 +185,15 @@
             </Grid>
         </Border>
 
-        <!-- 说明条 -->
-        <Border x:Name="hintBar" DockPanel.Dock="Bottom" Visibility="Collapsed"
+        <!-- 读写说明（可折叠） -->
+        <Border x:Name="hintBar" DockPanel.Dock="Bottom" CornerRadius="8" Visibility="Collapsed"
                 Background="#1A2332" BorderBrush="#1E3A5F" BorderThickness="0,1,0,0"
                 Padding="16,10">
-            <TextBlock FontSize="12" LineHeight="22"
-                       Foreground="#64748B" TextWrapping="Wrap">
+            <TextBlock FontSize="12" LineHeight="22" Foreground="#64748B" TextWrapping="Wrap">
                 <Run Text="· "/><Run Text="R" Foreground="#93C5FD" FontWeight="SemiBold"/>
                 <Run Text=" 只读 — 仅实时显示，供 MES 监控使用"/><LineBreak/>
                 <Run Text="· "/><Run Text="W" Foreground="#93C5FD" FontWeight="SemiBold"/>
-                <Run Text=" 只写 — 可下发到 PLC（如目标宽度、启动指令）"/><LineBreak/>
+                <Run Text=" 只写 — 可下发到 PLC"/><LineBreak/>
                 <Run Text="· "/><Run Text="R/W" Foreground="#93C5FD" FontWeight="SemiBold"/>
                 <Run Text=" 读写 — 既显示当前值，也可修改后写入"/><LineBreak/>
                 <Run Text="· 可写变量在「实时值」列可直接改数，点「写入」下发到 PLC"/>
@@ -176,16 +202,17 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
             <StackPanel>
+                <!-- 表头（列宽与数据行一致） -->
                 <Grid Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="36"/>
-                        <ColumnDefinition Width="1.1*"/>
-                        <ColumnDefinition Width="1.3*"/>
-                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="72"/>
+                        <ColumnDefinition Width="52"/>
+                        <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="48"/>
-                        <ColumnDefinition Width="1.6*"/>
-                        <ColumnDefinition Width="48"/>
-                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="76"/>
                         <ColumnDefinition Width="64"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="#" FontSize="12" Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
@@ -202,38 +229,57 @@
                 <ItemsControl x:Name="listRows">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
+                            <!-- 行容器：悬停约 0.6s 显示用途说明 -->
                             <Border BorderBrush="{StaticResource SF.Brush.Border.Default}"
-                                    BorderThickness="0,0,0,1" Padding="0,7"
-                                    Background="Transparent">
+                                    BorderThickness="0,0,0,1"
+                                    Padding="0,6"
+                                    ToolTipService.InitialShowDelay="600"
+                                    ToolTipService.ShowDuration="20000"
+                                    ToolTipService.BetweenShowDelay="200">
                                 <Border.Style>
                                     <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#222222"/>
+                                                <Setter Property="Background"
+                                                        Value="{StaticResource SF.Brush.Var.RowHover}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
+                                <Border.ToolTip>
+                                    <ToolTip Style="{StaticResource SF.Style.VarRowToolTip}"
+                                             Visibility="{Binding DescToolTipVisibility}">
+                                        <StackPanel MaxWidth="280">
+                                            <TextBlock Text="用途说明" FontSize="11" Margin="0,0,0,4"
+                                                       Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
+                                            <TextBlock Text="{Binding Description}" FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{StaticResource SF.Brush.Text.Primary}"/>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Border.ToolTip>
+
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="36"/>
-                                        <ColumnDefinition Width="1.1*"/>
-                                        <ColumnDefinition Width="1.3*"/>
-                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="52"/>
+                                        <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="48"/>
-                                        <ColumnDefinition Width="1.6*"/>
-                                        <ColumnDefinition Width="48"/>
-                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="64"/>
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Text="{Binding Index}" VerticalAlignment="Center"
                                                Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                               FontWeight="Medium"
+                                               FontWeight="Medium" TextTrimming="CharacterEllipsis"
                                                Foreground="{StaticResource SF.Brush.Text.Primary}"/>
                                     <TextBlock Grid.Column="2" Text="{Binding Address}" VerticalAlignment="Center"
-                                               FontFamily="Consolas" FontSize="12"
+                                               FontFamily="Consolas" FontSize="12" TextTrimming="CharacterEllipsis"
                                                Foreground="{StaticResource SF.Brush.Var.Addr}"/>
 
                                     <Border Grid.Column="3" CornerRadius="3" Padding="6,2"
@@ -250,7 +296,8 @@
                                                    Foreground="{Binding AccessFg}"/>
                                     </Border>
 
-                                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="5" Orientation="Horizontal" 
+                                                VerticalAlignment="Center" HorizontalAlignment="Left">
                                         <TextBlock Text="{Binding ValueText}"
                                                    FontFamily="Consolas" FontWeight="SemiBold"
                                                    VerticalAlignment="Center"
@@ -281,11 +328,9 @@
 
                                     <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Content="✎" Style="{StaticResource SF.Style.VarRowIcon}"
-                                                Foreground="{StaticResource SF.Brush.Text.Secondary}"
-                                                Tag="{Binding Id}" Click="BtnEdit_Click"/>
+                                                Tag="{Binding Id}" Click="BtnEdit_Click" ToolTip="编辑"/>
                                         <Button Content="×" Style="{StaticResource SF.Style.VarRowIcon}"
-                                                Foreground="{StaticResource SF.Brush.Text.Secondary}"
-                                                Tag="{Binding Id}" Click="BtnDelete_Click"/>
+                                                Tag="{Binding Id}" Click="BtnDelete_Click" ToolTip="删除"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>

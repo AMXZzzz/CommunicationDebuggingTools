@@ -81,13 +81,15 @@ namespace CommunicationDebuggingTools.Business.Persistence {
                 Address = v.Address,
                 DataType = (int)v.DataType,
                 Access = (int)v.Access,
-                Length = v.Length
+                Length = v.Length,
+                Unit = v.Unit ?? "",
+                Category = v.Category ?? "",
+                Description = v.Description ?? ""
             };
         }
 
         private static VariableItem FromDto (VariableDto d) {
-            var v = new VariableItem
-            {
+            return new VariableItem {
                 Id = d.Id ?? Guid.NewGuid().ToString("N"),
                 DeviceId = d.DeviceId ?? "",
                 Name = string.IsNullOrEmpty(d.Name) ? "新变量" : d.Name,
@@ -95,14 +97,15 @@ namespace CommunicationDebuggingTools.Business.Persistence {
                 DataType = (VariableDataType)d.DataType,
                 Access = (VariableAccess)d.Access,
                 Length = d.Length,
+                Unit = d.Unit ?? "",
+                Category = string.IsNullOrEmpty(d.Category) ? "状态点" : d.Category,
+                Description = d.Description ?? "",
                 Quality = DataQuality.Bad,
                 LastError = "",
                 LastValue = null
             };
-            return v;
         }
 
-        /// <summary>仅用于 JSON 序列化的平面结构。</summary>
         public class VariableDto {
             public string Id { get; set; }
             public string DeviceId { get; set; }
@@ -111,6 +114,9 @@ namespace CommunicationDebuggingTools.Business.Persistence {
             public int DataType { get; set; }
             public int Access { get; set; }
             public int Length { get; set; }
+            public string Unit { get; set; }
+            public string Category { get; set; }
+            public string Description { get; set; }
         }
     }
 }

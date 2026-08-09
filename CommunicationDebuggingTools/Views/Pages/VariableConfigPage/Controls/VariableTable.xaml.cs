@@ -8,9 +8,19 @@ using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Services;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
+    /// <summary>
+    /// 当前设备下的变量表。
+    /// 对齐 variable_config 模板：筛选 Tab、类型/读写/分类色块、
+    /// 可写行的输入+写入、底栏统计、行悬停显示用途说明。
+    /// </summary>
     public partial class VariableTable : UserControl {
+        /// <summary>变量增删后通知页面刷新左侧数量等。</summary>
         public event Action VariablesChanged;
+
+        /// <summary>请求打开编辑弹层。</summary>
         public event Action<VariableItem> EditRequested;
+
+        /// <summary>请求写入 PLC（参数为变量 Id；二期接协议）。</summary>
         public event Action<string> WriteRequested;
 
         private readonly ObservableCollection<Row> _rows = new ObservableCollection<Row>();
@@ -22,6 +32,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             listRows.ItemsSource = _rows;
         }
 
+        /// <summary>加载指定设备的变量列表。</summary>
         public void Load (string deviceId) {
             _deviceId = deviceId;
             Rebuild();
@@ -40,6 +51,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             btnHint.Content = open ? "v" : "^";
         }
 
+        /// <summary>按当前筛选重建行，并刷新 Tab/底栏计数。</summary>
         private void Rebuild () {
             _rows.Clear();
             int nAll = 0, nR = 0, nW = 0;
@@ -108,10 +120,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 WriteRequested?.Invoke(id);
         }
 
-        private Brush B (string key) {
-            return TryFindResource(key) as Brush ?? Brushes.Gray;
-        }
+        private Brush B (string key) =>
+            TryFindResource(key) as Brush ?? Brushes.Gray;
 
+        /// <summary>表格行视图模型（仅 UI，不直接绑业务实体）。</summary>
         private sealed class Row {
             public string Id { get; set; }
             public int Index { get; set; }
@@ -123,6 +135,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             public string WriteText { get; set; }
             public string UnitText { get; set; }
             public string Category { get; set; }
+            /// <summary>用途说明（行悬停 ToolTip）。</summary>
+            public string Description { get; set; }
+            public Visibility DescToolTipVisibility { get; set; }
+
             public Brush TypeBg { get; set; }
             public Brush TypeFg { get; set; }
             public Brush AccessBg { get; set; }
@@ -141,6 +157,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
                 string cat = string.IsNullOrWhiteSpace(v.Category) ? "状态点" : v.Category;
                 string val = v.LastValue != null ? v.LastValue.ToString() : "—";
+                string desc = (v.Description ?? "").Trim();
 
                 var row = new Row
                 {
@@ -154,6 +171,11 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                     WriteText = v.LastValue != null ? v.LastValue.ToString() : "",
                     UnitText = string.IsNullOrWhiteSpace(v.Unit) ? "—" : v.Unit,
                     Category = cat,
+                    Description = desc,
+                    // 无说明时不弹出空气泡
+                    DescToolTipVisibility = string.IsNullOrEmpty(desc)
+                        ? Visibility.Collapsed
+                        : Visibility.Visible,
                     ValueTextVisibility = canWrite ? Visibility.Collapsed : Visibility.Visible,
                     WriteEditorVisibility = canWrite ? Visibility.Visible : Visibility.Collapsed,
                     ValueFg = host.B("SF.Brush.Text.Primary")
