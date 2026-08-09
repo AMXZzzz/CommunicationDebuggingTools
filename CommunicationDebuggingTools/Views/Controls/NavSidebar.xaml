@@ -8,12 +8,15 @@
              xmlns:settings="clr-namespace:CommunicationDebuggingTools.Views.Pages.Settings">
 
     <Border x:Name="SidebarBorder"
+            ClipToBounds="True"
             Background="{StaticResource SF.Brush.Bg.Surface}"
             BorderBrush="{StaticResource SF.Brush.Border.Default}"
-            BorderThickness="0,0,1,0"
-            Width="{StaticResource SF.ControlsSize.SidebarExpanded}">
+            BorderThickness="0,0,1,0">
         <Border.Style>
             <Style TargetType="Border">
+                <!-- 默认展开；不要再在 Border 上写 Width= 属性 -->
+                <Setter Property="Width"
+                        Value="{StaticResource SF.ControlsSize.SidebarExpanded}"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsChecked, ElementName=btnToggleSidebar}"
                                  Value="True">
@@ -56,9 +59,9 @@
                           Background="Transparent"
                           Foreground="{StaticResource SF.Brush.Text.Primary}"
                           BorderThickness="0"
-                          HorizontalContentAlignment="Center"
+                          HorizontalContentAlignment="Left"
                           VerticalContentAlignment="Center"
-                          Padding="16,0"
+                          Padding="12,0"
                           Cursor="Hand"
                           FontSize="14"
                           FocusVisualStyle="{x:Null}"/>

@@ -17,10 +17,10 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
                     <Border x:Name="Bd"
-                            Background="{StaticResource SF.Brush.Bg.Hover}"
+                            Background="{StaticResource SF.Brush.Bg.App}"
                             BorderBrush="{StaticResource SF.Brush.Border.Default}"
                             BorderThickness="1"
-                            CornerRadius="6"
+                            CornerRadius="2"
                             SnapsToDevicePixels="True">
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Margin="{TemplateBinding Padding}"
@@ -30,10 +30,14 @@
                         <Trigger Property="IsFocused" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush"
                                     Value="{StaticResource SF.Brush.Accent.Default}"/>
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource SF.Brush.Bg.Hover}"/>
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush"
                                     Value="{StaticResource SF.Brush.Accent.Default}"/>
+                            <Setter TargetName="Bd" Property="Background"
+                                    Value="{StaticResource SF.Brush.Bg.Hover}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.5"/>
@@ -43,5 +47,30 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+
+    <!-- 行悬停：用途说明 -->
+    <Style x:Key="SF.Style.VarRowToolTip" TargetType="ToolTip">
+        <Setter Property="Background" Value="{StaticResource SF.Brush.Bg.Surface}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource SF.Brush.Border.Default}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="HasDropShadow" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
 
 </ResourceDictionary>

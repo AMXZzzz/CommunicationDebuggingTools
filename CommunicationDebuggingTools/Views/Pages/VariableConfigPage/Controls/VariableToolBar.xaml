@@ -3,9 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Border Background="{StaticResource SF.Brush.Bg.Surface}"
-            BorderBrush="{StaticResource SF.Brush.Border.Default}"
+            BorderBrush="{StaticResource SF.Brush.Var.PanelBorder}"
             BorderThickness="0,0,0,1"
-            Padding="16,8">
+            Padding="16,10">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -33,7 +33,10 @@
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
                         VerticalAlignment="Center">
-                <Border Opacity="0.25"
+                <Border Opacity="1"
+                        Background="{StaticResource SF.Brush.Var.HeaderBg}"
+                        BorderBrush="{StaticResource SF.Brush.Var.PanelBorder}"
+                        BorderThickness="1"
                         CornerRadius="10"
                         Padding="10,3"
                         Margin="0,0,8,0">

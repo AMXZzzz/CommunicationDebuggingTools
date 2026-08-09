@@ -1,8 +1,8 @@
 ﻿<UserControl x:Class="CommunicationDebuggingTools.Views.VariableConfigPage.Controls.VariableDeviceHeader"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Border Padding="0,0,0,12"
-            BorderBrush="{StaticResource SF.Brush.Border.Default}"
+    <Border Padding="0,0,0,14"
+            BorderBrush="{StaticResource SF.Brush.Var.PanelBorder}"
             BorderThickness="0,0,0,1">
         <Grid>
             <Grid.ColumnDefinitions>

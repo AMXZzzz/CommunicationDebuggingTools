@@ -69,6 +69,12 @@
     <Color x:Key="SF.Color.Mes.TagSingleFg">#FF94A3B8</Color>
 
     <!-- ==================== 变量配置表 ==================== -->
+    <Color x:Key="SF.Color.Var.PanelBg">#FF1E1E1E</Color>
+    <Color x:Key="SF.Color.Var.PanelBorder">#FF3F3F46</Color>
+    <Color x:Key="SF.Color.Var.HeaderBg">#FF1E1E1E</Color>
+    <Color x:Key="SF.Color.Var.DeviceSelectedBg">#FF223548</Color>
+    <Color x:Key="SF.Color.Var.DeviceSelectedBorder">#FF3B82F6</Color>
+
     <Color x:Key="SF.Color.Var.Addr">#FF93C5FD</Color>
     <Color x:Key="SF.Color.Var.TypeBg">#FF1E3A5F</Color>
     <Color x:Key="SF.Color.Var.TypeFg">#FF93C5FD</Color>
@@ -86,18 +92,18 @@
     <Color x:Key="SF.Color.Var.RwRwFg">#FF86EFAC</Color>
     <Color x:Key="SF.Color.Var.CatStatusBg">#FF1E3A5F</Color>
     <Color x:Key="SF.Color.Var.CatStatusFg">#FF93C5FD</Color>
-    <Color x:Key="SF.Color.Var.CatDataBg">#FF2A2A2A</Color>
-    <Color x:Key="SF.Color.Var.CatDataFg">#FFAAAAAA</Color>
+    <Color x:Key="SF.Color.Var.CatDataBg">#FF2A313A</Color>
+    <Color x:Key="SF.Color.Var.CatDataFg">#FFB7C3D0</Color>
     <Color x:Key="SF.Color.Var.CatWidthBg">#FF3B2A1A</Color>
     <Color x:Key="SF.Color.Var.CatWidthFg">#FFFBBF24</Color>
-    <Color x:Key="SF.Color.Var.WriteBtnBg">#FF0C4A6E</Color>
-    <Color x:Key="SF.Color.Var.WriteBtnBorder">#FF1E3A5F</Color>
-    <Color x:Key="SF.Color.Var.WriteBtnFg">#FF7DD3FC</Color>
+    <Color x:Key="SF.Color.Var.WriteBtnBg">#FF11486C</Color>
+    <Color x:Key="SF.Color.Var.WriteBtnBorder">#FF2A628A</Color>
+    <Color x:Key="SF.Color.Var.WriteBtnFg">#FFBFE6FF</Color>
     <Color x:Key="SF.Color.Var.BoolOn">#FF4ADE80</Color>
-    <Color x:Key="SF.Color.Var.RowHover">#FF222222</Color>
-    <Color x:Key="SF.Color.Var.HintBg">#FF1A2332</Color>
-    <Color x:Key="SF.Color.Var.HintBorder">#FF1E3A5F</Color>
-    <Color x:Key="SF.Color.Var.HintText">#FF64748B</Color>
+    <Color x:Key="SF.Color.Var.RowHover">#FF28313B</Color>
+    <Color x:Key="SF.Color.Var.HintBg">#FF1E2A38</Color>
+    <Color x:Key="SF.Color.Var.HintBorder">#FF35506C</Color>
+    <Color x:Key="SF.Color.Var.HintText">#FF9AA9BA</Color>
 
     <!-- ================================================================== -->
     <!--                              Brush                                 -->
@@ -167,6 +173,11 @@
     <SolidColorBrush x:Key="SF.Brush.Mes.TagSingleFg" Color="{StaticResource SF.Color.Mes.TagSingleFg}"/>
 
     <!-- 变量表 -->
+    <SolidColorBrush x:Key="SF.Brush.Var.PanelBg" Color="{StaticResource SF.Color.Var.PanelBg}"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.PanelBorder" Color="{StaticResource SF.Color.Var.PanelBorder}"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.HeaderBg" Color="{StaticResource SF.Color.Var.HeaderBg}"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.DeviceSelectedBg" Color="{StaticResource SF.Color.Var.DeviceSelectedBg}"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.DeviceSelectedBorder" Color="{StaticResource SF.Color.Var.DeviceSelectedBorder}"/>
     <SolidColorBrush x:Key="SF.Brush.Var.Addr" Color="{StaticResource SF.Color.Var.Addr}"/>
     <SolidColorBrush x:Key="SF.Brush.Var.TypeBg" Color="{StaticResource SF.Color.Var.TypeBg}"/>
     <SolidColorBrush x:Key="SF.Brush.Var.TypeFg" Color="{StaticResource SF.Color.Var.TypeFg}"/>
@@ -196,5 +207,20 @@
     <SolidColorBrush x:Key="SF.Brush.Var.HintBg" Color="{StaticResource SF.Color.Var.HintBg}"/>
     <SolidColorBrush x:Key="SF.Brush.Var.HintBorder" Color="{StaticResource SF.Color.Var.HintBorder}"/>
     <SolidColorBrush x:Key="SF.Brush.Var.HintText" Color="{StaticResource SF.Color.Var.HintText}"/>
+    <!-- 示例命名，按你主题微调色值 -->
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Bool.Bg" Color="#1A3D2E"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Bool.Fg" Color="#4EC9B0"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Int16.Bg" Color="#1A2A3D"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Int16.Fg" Color="#93C5FD"/>
+    <!-- Int32 / Float / Double / String 同理 -->
 
+    <SolidColorBrush x:Key="SF.Brush.Var.Access.R.Bg" Color="#1A2A3D"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Access.R.Fg" Color="#93C5FD"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Access.W.Bg" Color="#3D2A1A"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Access.W.Fg" Color="#CE9178"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Access.RW.Bg" Color="#1A3D2E"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Access.RW.Fg" Color="#4EC9B0"/>
+
+    <SolidColorBrush x:Key="SF.Brush.Var.Category.Bg" Color="#1A2A3D"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Category.Fg" Color="#93C5FD"/>
 </ResourceDictionary>

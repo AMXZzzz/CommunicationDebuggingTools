@@ -17,7 +17,7 @@
                 <!-- 加载按钮样式 -->
                 <ResourceDictionary Source="Resources/Styles/Buttons.xaml"/>
                 <!-- 加载导航样式 -->
-                <ResourceDictionary Source="Resources/Styles/Navigation.xaml"/>
+                <ResourceDictionary Source="Resources/Styles/SlideIndicatorBar.xaml"/>
                 <!-- 加载滚动条样式 -->
                 <ResourceDictionary Source="Resources/Styles/ScrollBar.xaml"/>
                 <!-- 加载勾选框样式 -->
@@ -28,6 +28,8 @@
                 <ResourceDictionary Source="Resources/Styles/ComboBox.xaml"/>
                 <!-- 加载对话框文本框样式 -->
                 <ResourceDictionary Source="Resources/Styles/DialogTextBox.xaml"/>
+                <!-- 加载图标样式 -->
+                <ResourceDictionary Source="Resources/Styles/Icon.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
