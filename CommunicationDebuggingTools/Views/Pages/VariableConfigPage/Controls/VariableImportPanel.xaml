@@ -7,7 +7,8 @@
             BorderBrush="{StaticResource SF.Brush.Border.Default}"
             BorderThickness="1"
             CornerRadius="10"
-            ClipToBounds="True">
+            ClipToBounds="True"
+            MouseLeftButtonDown="Root_MouseLeftButtonDown">
         <DockPanel>
             <!-- 标题 -->
             <Border DockPanel.Dock="Top"

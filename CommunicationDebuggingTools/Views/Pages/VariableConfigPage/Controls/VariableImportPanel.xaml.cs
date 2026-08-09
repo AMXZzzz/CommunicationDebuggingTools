@@ -256,6 +256,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             ExecuteImport();
         }
 
+        private void Root_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>e.Handled = true;
+
         /// <summary>页面确认清空后，或无需清空时直接调用。</summary>
         public void ExecuteImport () {
             if (_accepted.Count == 0 || MyAppServices.Variables == null)

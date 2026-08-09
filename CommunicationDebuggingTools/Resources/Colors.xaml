@@ -111,5 +111,6 @@
     <SolidColorBrush x:Key="SF.Brush.DisconnectBtn.Bg" Color="{StaticResource DisconnectBtnBgColor}"/>
     <SolidColorBrush x:Key="SF.Brush.DisconnectBtn.Fg" Color="{StaticResource DisconnectBtnFgColor}"/>
     <SolidColorBrush x:Key="SF.Brush.DisconnectBtn.Border" Color="{StaticResource DisconnectBtnBorderColor}"/>
+    <SolidColorBrush x:Key="SF.Brush.Button.Danger.Default" Color="{StaticResource SF.Color.Button.Danger.Bg}"/>
 
 </ResourceDictionary>
