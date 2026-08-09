@@ -179,7 +179,8 @@
                            Margin="0 14 0 6"/>
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse Width="8" Height="8"
+                        <Ellipse x:Name="statusDot"
+                                 Width="8" Height="8"
                                  Fill="{StaticResource SF.Brush.Status.Success}"
                                  Margin="0 0 6 0"/>
                         <TextBlock x:Name="txtStatus"

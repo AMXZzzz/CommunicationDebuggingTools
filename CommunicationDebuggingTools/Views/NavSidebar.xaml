@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:device="clr-namespace:CommunicationDebuggingTools.Views.Pages.Device"
              xmlns:monitor="clr-namespace:CommunicationDebuggingTools.Views.Pages.Monitor"
+             xmlns:variable="clr-namespace:CommunicationDebuggingTools.Views.Pages.Variable"
              xmlns:log="clr-namespace:CommunicationDebuggingTools.Views.Pages.Log"
              xmlns:settings="clr-namespace:CommunicationDebuggingTools.Views.Pages.Settings">
 
@@ -67,6 +68,11 @@
                              Tag="{x:Type monitor:DataMonitorPage}"
                              GroupName="Nav"
                              IsChecked="True"
+                             Style="{StaticResource SF.Style.NavRadioButtonStyle}"
+                             Checked="Nav_Checked"/>
+                <RadioButton Content="变量配置"
+                             Tag="{x:Type variable:VariableConfigPage}"
+                             GroupName="Nav"
                              Style="{StaticResource SF.Style.NavRadioButtonStyle}"
                              Checked="Nav_Checked"/>
                 <RadioButton Content="设备管理"

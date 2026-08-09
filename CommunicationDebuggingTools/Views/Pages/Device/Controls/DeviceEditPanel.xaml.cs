@@ -65,6 +65,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (info == null)
                 info = new DeviceInfo();
 
+            if (txtStatus != null) {
+                txtStatus.Text = info.StatusText ?? "离线";
+                ApplyStatusColor(info.StatusType);
+            }
             _editingId = isNew ? null : info.Id;
             _isDual = info.IsDualLane;
 
@@ -87,6 +91,37 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
             UpdateLaneButtons();
 
+        }
+
+        /// <summary>
+        /// 按状态设置状态文字与指示点颜色（与 DeviceCard 一致）。
+        /// </summary>
+        private void ApplyStatusColor (DeviceStatusType type) {
+            string key;
+            switch (type) {
+                case DeviceStatusType.Success:
+                    key = "SF.Brush.Status.Success";
+                    break;
+                case DeviceStatusType.Connecting:
+                case DeviceStatusType.Warning:
+                    key = "SF.Brush.Status.Warning";
+                    break;
+                case DeviceStatusType.Error:
+                    key = "SF.Brush.Status.Error";
+                    break;
+                default:
+                    key = "SF.Brush.Text.Secondary"; // 离线：灰色
+                    break;
+            }
+
+            var brush = (System.Windows.Media.Brush)FindResource(key);
+
+            if (txtStatus != null)
+                txtStatus.Foreground = brush;
+
+            // 状态圆点
+            if (statusDot != null)
+                statusDot.Fill = brush;
         }
 
         /// <summary>
