@@ -1,44 +1,65 @@
-﻿using CommunicationDebuggingTools.Business.Device;
+﻿using System.IO;
+using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Persistence;
 using CommunicationDebuggingTools.Business.Tools;
+using CommunicationDebuggingTools.Business.Variable;
 using CommunicationDebuggingTools.Core.Interfaces;
-using System.IO;
 
 namespace CommunicationDebuggingTools.Services {
     /// <summary>
-    /// 进程内全局服务容器（简化版依赖注入/服务定位器）。
-    /// 在应用启动时（App.xaml.cs 的 OnStartup）调用一次 Initialize 完成构建，
-    /// 之后 UI 层各页面直接通过 Devices/Protocols 静态属性访问共享的业务服务实例。
+    /// 进程内全局服务容器（简化服务定位器）。
+    /// 在 App 启动时调用一次 <see cref="Initialize"/>，UI 通过静态属性访问。
     /// </summary>
     public static class MyAppServices {
-        /// <summary>全局共享的设备业务服务实例，UI 页面统一通过它访问/操作设备。</summary>
+        /// <summary>设备业务服务。</summary>
         public static IDeviceService Devices { get; private set; }
 
-        /// <summary>全局共享的协议插件解析器实例，可用于获取已加载的协议名称列表。</summary>
+        /// <summary>协议插件解析器。</summary>
         public static IProtocolResolver Protocols { get; private set; }
 
+        /// <summary>变量配置与读写。</summary>
+        public static IVariableService Variables { get; private set; }
+
         /// <summary>
-        /// 初始化全局服务：加载 plugins 目录下的协议插件，构建 JSON 设备仓储与设备服务，
-        /// 并从本地配置文件加载已保存的设备列表。重复调用时会直接返回（幂等），
-        /// 避免多次初始化导致重复加载插件或重复读取配置文件。
+        /// 幂等初始化：协议 → 设备 → 变量。
+        /// 已初始化则直接返回。
         /// </summary>
         public static void Initialize () {
             if (Devices != null)
                 return;
 
             string baseDir = System.AppDomain.CurrentDomain.BaseDirectory;
-            string pluginDir = Path.Combine(baseDir, "plugins");
-            string configPath = Path.Combine(baseDir, "config", "devices.json");
 
+            Protocols = CreateProtocolResolver(baseDir);
+            Devices = CreateDeviceService(baseDir, Protocols);
+            Variables = CreateVariableService(baseDir,Devices);
+        }
+
+        /// <summary>加载 plugins 目录下的协议 DLL。</summary>
+        private static IProtocolResolver CreateProtocolResolver (string baseDir) {
+            string pluginDir = Path.Combine(baseDir, "plugins");
             var resolver = new ProtocolResolver();
             resolver.LoadFromFolder(pluginDir);
+            return resolver;
+        }
 
+        /// <summary>构建设备服务并加载 devices.json。</summary>
+        private static IDeviceService CreateDeviceService (
+            string baseDir, IProtocolResolver resolver) {
+            string configPath = Path.Combine(baseDir, "config", "devices.json");
             var repo = new JsonDeviceRepository(configPath);
-            var deviceService = new DeviceService(resolver, repo);
-            deviceService.Load();
+            var service = new DeviceService(resolver, repo);
+            service.Load();
+            return service;
+        }
 
-            Protocols = resolver;
-            Devices = deviceService;
+
+        /// <summary>构建变量服务并加载 config\variables.json。</summary>
+        private static IVariableService CreateVariableService (string baseDir, IDeviceService devices) {
+            string path = Path.Combine(baseDir, "config", "variables.json");
+            var service = new VariableService(devices, new JsonVariableRepository(path));
+            service.Load();
+            return service;
         }
     }
 }

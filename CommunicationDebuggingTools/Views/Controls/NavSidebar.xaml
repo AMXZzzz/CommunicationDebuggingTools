@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:device="clr-namespace:CommunicationDebuggingTools.Views.Pages.Device"
              xmlns:monitor="clr-namespace:CommunicationDebuggingTools.Views.Pages.Monitor"
-             xmlns:variable="clr-namespace:CommunicationDebuggingTools.Views.Pages.Variable"
+             xmlns:variable="clr-namespace:CommunicationDebuggingTools.Views.VariableConfigPage"
              xmlns:log="clr-namespace:CommunicationDebuggingTools.Views.Pages.Log"
              xmlns:settings="clr-namespace:CommunicationDebuggingTools.Views.Pages.Settings">
 

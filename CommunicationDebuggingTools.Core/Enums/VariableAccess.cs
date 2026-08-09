@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-
-///读写权限类型
-namespace CommunicationDebuggingTools.Core.Enums {
-    internal class VariableAccess {
+﻿namespace CommunicationDebuggingTools.Core.Enums {
+    /// <summary>变量访问权限。</summary>
+    public enum VariableAccess {
+        ReadOnly = 0,
+        WriteOnly = 1,
+        ReadWrite = 2
     }
 }

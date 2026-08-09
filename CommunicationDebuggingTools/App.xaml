@@ -22,6 +22,12 @@
                 <ResourceDictionary Source="Resources/Styles/ScrollBar.xaml"/>
                 <!-- 加载勾选框样式 -->
                 <ResourceDictionary Source="Resources/Styles/CheckBox.xaml"/>
+                <!-- 加载数据表格样式 -->
+                <ResourceDictionary Source="Resources/Styles/DataGrid.xaml"/>
+                <!-- 加载下拉框样式 -->
+                <ResourceDictionary Source="Resources/Styles/ComboBox.xaml"/>
+                <!-- 加载对话框文本框样式 -->
+                <ResourceDictionary Source="Resources/Styles/DialogTextBox.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

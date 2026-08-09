@@ -15,12 +15,12 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- ==================== 工具栏 ==================== -->
+        <!-- 工具栏 -->
         <device:DeviceToolBar x:Name="toolBar"
                               Grid.Row="0"
                               Margin="0,0,0,12"/>
 
-        <!-- ==================== 设备列表 ==================== -->
+        <!-- 设备列表 -->
         <ScrollViewer x:Name="deviceScroll"
                       Grid.Row="2"
                       Margin="16,0,16,16"
@@ -61,23 +61,17 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- ==================== 模态遮罩（与报警一致：挡住页面其它区域） ==================== -->
-        <Border x:Name="editMask"
-                Grid.Row="0"
-                Grid.RowSpan="3"
+        <!-- 遮罩 + 编辑面板（盖住全部行） -->
+        <Border x:Name="editOverlay"
+                Grid.Row="0" Grid.RowSpan="3"
                 Background="#99000000"
                 Visibility="Collapsed"
-                IsHitTestVisible="True"/>
-
-        <!-- ==================== 编辑 Popup（结构对齐 alarmPopup） ==================== -->
-        <Popup x:Name="editPopup"
-               AllowsTransparency="True"
-               StaysOpen="True"
-               PopupAnimation="Fade"
-               Placement="Center">
-            <Border Background="Transparent">
-                <device:DeviceEditPanel x:Name="editPanel"/>
-            </Border>
-        </Popup>
+                MouseLeftButtonDown="EditOverlay_MouseLeftButtonDown">
+            <device:DeviceEditPanel x:Name="editPanel"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"
+                                   MouseLeftButtonDown="Panel_MouseLeftButtonDown"/>
+        </Border>
     </Grid>
 </Page>

@@ -1,5 +1,7 @@
-﻿using System.Windows;
+﻿using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Services;
+using System.Windows;
 
 namespace CommunicationDebuggingTools {
     public partial class App : Application {
@@ -13,9 +15,8 @@ namespace CommunicationDebuggingTools {
         /// </summary>
         protected override void OnExit (ExitEventArgs e) {
             try {
-                MyAppServices.Devices.DisconnectAll();
+                MyAppServices.Devices?.DisconnectAll();
             } catch {
-                // 退出时不再抛出
             }
 
             base.OnExit(e);

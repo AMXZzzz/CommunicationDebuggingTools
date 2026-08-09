@@ -55,8 +55,11 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Views\Controls\AppMessageDialog.xaml.cs">
+      <DependentUpon>AppMessageDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Services\MyAppServices.cs" />
-    <Compile Include="Views\NavSidebar.xaml.cs">
+    <Compile Include="Views\Controls\NavSidebar.xaml.cs">
       <DependentUpon>NavSidebar.xaml</DependentUpon>
     </Compile>
     <Compile Include="Views\Pages\Device\AddDeviceMarker.cs" />
@@ -105,10 +108,34 @@
     <Compile Include="Views\Pages\Settings\SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Views\Tools\VisualTreeExtensions.cs" />
-    <Compile Include="Views\VariableConfigPage\VariableConfigPage.xaml.cs">
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableExportPanel.xaml.cs">
+      <DependentUpon>VariableExportPanel.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableBatchAddPanel.xaml.cs">
+      <DependentUpon>VariableBatchAddPanel.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableDeviceHeader.xaml.cs">
+      <DependentUpon>VariableDeviceHeader.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableEditPanel.xaml.cs">
+      <DependentUpon>VariableEditPanel.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableImportPanel.xaml.cs">
+      <DependentUpon>VariableImportPanel.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableToolBar.xaml.cs">
+      <DependentUpon>VariableToolBar.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableDeviceList.xaml.cs">
+      <DependentUpon>VariableDeviceList.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\Controls\VariableTable.xaml.cs">
+      <DependentUpon>VariableTable.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\Pages\VariableConfigPage\VariableConfigPage.xaml.cs">
       <DependentUpon>VariableConfigPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Views\Tools\VisualTreeExtensions.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -122,6 +149,10 @@
       <SubType>Code</SubType>
     </Compile>
     <Page Include="Resources\Animations.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Controls\AppMessageDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -141,6 +172,18 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Resources\Styles\ComboBox.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Resources\Styles\DataGrid.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Resources\Styles\DialogTextBox.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Resources\Styles\Navigation.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -149,7 +192,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Views\NavSidebar.xaml">
+    <Page Include="Views\Controls\NavSidebar.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -213,7 +256,39 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Views\VariableConfigPage\VariableConfigPage.xaml">
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableExportPanel.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableBatchAddPanel.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableDeviceHeader.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableEditPanel.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableImportPanel.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableToolBar.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableDeviceList.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\Controls\VariableTable.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\Pages\VariableConfigPage\VariableConfigPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

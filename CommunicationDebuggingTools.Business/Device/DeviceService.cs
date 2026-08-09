@@ -35,6 +35,15 @@ namespace CommunicationDebuggingTools.Business.Device {
             Devices = new ObservableCollection<DeviceInfo>();
         }
 
+
+        /// <summary>仅测试：跳过探测，直接挂上已连接会话。</summary>
+        internal void AttachSessionForTest (string deviceId, IProtocol protocol) {
+            DeviceInfo d = FindRequired(deviceId);
+            _sessions[deviceId] = protocol;
+            d.IsConnected = true;
+            d.StatusType = DeviceStatusType.Success;
+        }
+
         // -------------------- 持久化 --------------------
 
         /// <summary>重新加载设备列表；先断开全部会话，状态一律离线。</summary>

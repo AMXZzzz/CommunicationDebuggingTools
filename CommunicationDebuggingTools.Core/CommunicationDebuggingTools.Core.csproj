@@ -54,6 +54,8 @@
     <Compile Include="Interfaces\IProtocolCapabilities.cs" />
     <Compile Include="Interfaces\IProtocolDataAccess.cs" />
     <Compile Include="Interfaces\IProtocolResolver.cs" />
+    <Compile Include="Interfaces\IVariableRepository.cs" />
+    <Compile Include="Interfaces\IVariableService.cs" />
     <Compile Include="Models\ConnectionFieldSpec.cs" />
     <Compile Include="Models\DeviceInfo.cs" />
     <Compile Include="Models\ProtocolConnectionContext.cs" />
