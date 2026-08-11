@@ -3,6 +3,21 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
+/*
+ 日志: 
+    1. 没做实时读取
+    2. 考虑在DLL引出地址说明
+    3. 离线为更新状态, 
+    4. 考虑增加窗口移动(上下边界可拖动)
+    5. MES启动,自动开始连接
+    6. 完美全屏优化(上方做成单独用户控件, 尝试完全自己写(增强知识))
+    7. 松下DT和R区同时使用时会崩溃
+    8. 松下报文无法解析
+ */
+
+
+
+
 namespace CommunicationDebuggingTools {
     /// <summary>
     /// 主窗口：自定义无边框窗口，顶栏 + 侧栏（<see cref="Views.Controls.NavSidebar"/>）+ 内容 Frame。
