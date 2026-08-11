@@ -47,7 +47,7 @@
         <Setter Property="BorderBrush" Value="{StaticResource SF.Brush.Border.Default}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Height" Value="{StaticResource SF.ControlsSize.ButtonHeight}"/>
-        <Setter Property="Padding" Value="10,0"/>
+        <Setter Property="Padding" Value="0 0"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource SF.Style.ComboBoxItem}"/>
@@ -71,7 +71,7 @@
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="28"/>
+                                                <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Path x:Name="Arrow"
                                                   Grid.Column="1"

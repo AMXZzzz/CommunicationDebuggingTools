@@ -1,14 +1,15 @@
 ﻿<UserControl x:Class="CommunicationDebuggingTools.Views.VariableConfigPage.Controls.VariableBatchAddPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Width="860"
+             Width="900"
              MaxHeight="560">
 
     <Border Background="{StaticResource SF.Brush.Bg.Surface}"
             BorderBrush="{StaticResource SF.Brush.Border.Default}"
             BorderThickness="1"
             CornerRadius="10"
-            ClipToBounds="True">
+            ClipToBounds="True"
+            MouseLeftButtonDown="Root_MouseLeftButtonDown">
         <DockPanel>
             <!-- ==================== 标题 ==================== -->
             <Border DockPanel.Dock="Top"
@@ -105,9 +106,9 @@
                                             <ColumnDefinition Width="28"/>
                                             <ColumnDefinition Width="100"/>
                                             <ColumnDefinition Width="110"/>
-                                            <ColumnDefinition Width="72"/>
-                                            <ColumnDefinition Width="64"/>
-                                            <ColumnDefinition Width="54"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="65"/>
                                             <ColumnDefinition Width="84"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="32"/>
@@ -141,9 +142,9 @@
                                         <ColumnDefinition Width="28"/>
                                         <ColumnDefinition Width="100"/>
                                         <ColumnDefinition Width="110"/>
-                                        <ColumnDefinition Width="72"/>
-                                        <ColumnDefinition Width="64"/>
-                                        <ColumnDefinition Width="54"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="65"/>
                                         <ColumnDefinition Width="84"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="32"/>

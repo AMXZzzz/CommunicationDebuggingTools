@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 
@@ -61,6 +62,9 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
         private void BtnClose_Click (object sender, RoutedEventArgs e) =>
             CloseRequested?.Invoke();
+
+        private void Root_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
+            e.Handled = true;
 
         private void BtnSave_Click (object sender, RoutedEventArgs e) {
             var list = new List<VariableItem>();
