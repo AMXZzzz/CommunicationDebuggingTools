@@ -6,37 +6,91 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Plugin.Panasonic {
+
+    /// <summary>
+    /// 寄存类型
+    /// </summary>
+    internal enum PanasonicArea {
+        X,
+        Y,
+        R,
+        DT,
+        WR
+    }
+
+    /// <summary>
+    /// 地址类型封包
+    /// </summary>
+    internal struct PanasonicAddress {
+        //! 地址类型
+        public PanasonicArea Area;
+        //! 地址编号
+        public int Index;
+        //! 是否为位类型
+        public bool IsBit;
+    }
+
     /// <summary>
     /// 松下 MEWTOCOL-COM 会话：站号、地址解析、TCP、报文收发。
     /// 帧格式：% + 站号(2位十六进制) + # + 命令 + BCC(2位十六进制) + CR
     /// BCC：对「站号+#命令」整段逐字节异或。
     /// </summary>
-    internal sealed class PanasonicSession : IDisposable {
+    internal sealed class PanasonicSession : IDisposable {  //! 不允许继承
+        //! TCP 客户端
         private TcpClient _tcp;
+        //! TCP 网络流
         private NetworkStream _stream;
+        //! 读写超时（毫秒）
         private int _timeoutMs = 3000;
+        //! 是否已释放
         private bool _disposed;
+        //! 线程同步锁
         private readonly object _sync = new object();
 
-        /// <summary>MEWTOCOL 站号（1–99）。</summary>
+        /// <summary>
+        /// MEWTOCOL 站号（1–99）。
+        /// </summary>
         public int Station { get; private set; } = 1;
 
+        /// <summary>
+        /// 连接状态
+        /// </summary>
         public bool IsConnected =>
             _tcp != null && _tcp.Connected && _stream != null;
 
+        /// <summary>
+        /// 超时
+        /// </summary>
         public int TimeoutMs {
             get => _timeoutMs;
             set => _timeoutMs = value < 500 ? 500 : value;
         }
 
+        /// <summary>
+        /// 应用设置信息
+        /// </summary>
+        /// <param name="json"></param>
         public void ApplySettingsJson (string json) {
             Station = ReadIntField(json, "station", 1);
             if (Station < 0) Station = 0;
             if (Station > 99) Station = 99;
         }
 
+        /// <summary>
+        /// 连接
+        /// </summary>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
+        /// <param name="timeoutMs"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="TimeoutException"></exception>
+        /// <exception cref="InvalidOperationException"></exception>
         public async Task ConnectAsync (string ip, int port, int timeoutMs, CancellationToken ct) {
+
             Disconnect();
+
             if (string.IsNullOrWhiteSpace(ip))
                 throw new ArgumentException("IP 为空");
 
@@ -46,6 +100,7 @@ namespace Plugin.Panasonic {
             TimeoutMs = timeoutMs > 0 ? timeoutMs : 3000;
             _tcp = new TcpClient();
 
+            //! 连接
             var connectTask = _tcp.ConnectAsync(ip, port);
             var timeoutTask = Task.Delay(TimeoutMs, ct);
             if (await Task.WhenAny(connectTask, timeoutTask) != connectTask) {
@@ -54,16 +109,21 @@ namespace Plugin.Panasonic {
             }
             await connectTask;
 
+            //! 检查连接状态
             if (!_tcp.Connected || ct.IsCancellationRequested) {
                 Disconnect();
                 throw new InvalidOperationException("连接失败或已取消");
             }
 
+            //! 连接成功
             _stream = _tcp.GetStream();
             _stream.ReadTimeout = TimeoutMs;
             _stream.WriteTimeout = TimeoutMs;
         }
 
+        /// <summary>
+        /// 断开连接
+        /// </summary>
         public void Disconnect () {
             try { if (_stream != null) { _stream.Close(); _stream = null; } } catch { }
             try { if (_tcp != null) { _tcp.Close(); _tcp = null; } } catch { }
@@ -81,23 +141,30 @@ namespace Plugin.Panasonic {
             if (!IsConnected)
                 throw new InvalidOperationException("未连接");
 
-            // payload = SS + # + CMD
+            //! 拼接站号+命令 payload = SS + # + CMD
             string payload = Station.ToString("X2") + "#" + commandBody;
             string frame = "%" + payload + CalcBcc(payload) + "\r";
             byte[] send = Encoding.ASCII.GetBytes(frame);
 
+            //! 上锁发送，防止多线程同时访问网络流
             lock (_sync) {
+                //! 发送
                 _stream.Write(send, 0, send.Length);
+                //! 立即刷新，确保发送出去
                 _stream.Flush();
+                //! 读取完成
                 return ReadLineCr();
             }
         }
 
-        /// <summary>读到 CR 为止（不含 CR）。</summary>
+        /// <summary>
+        /// 读到 CR 为止（不含 CR）。
+        /// </summary>
         private string ReadLineCr () {
             var sb = new StringBuilder(64);
             var buf = new byte[1];
             int guard = 0;
+
             while (guard++ < 4096) {
                 int n = _stream.Read(buf, 0, 1);
                 if (n <= 0)
@@ -112,7 +179,9 @@ namespace Plugin.Panasonic {
             return sb.ToString();
         }
 
-        /// <summary>BCC = payload 每个字符异或，输出 2 位大写十六进制。</summary>
+        /// <summary>
+        /// BCC = payload 每个字符异或，输出 2 位大写十六进制。
+        /// </summary>
         public static string CalcBcc (string payload) {
             int xor = 0;
             for (int i = 0; i < payload.Length; i++)
@@ -163,6 +232,12 @@ namespace Plugin.Panasonic {
 
         // -------------------- 解析（原有） --------------------
 
+        /// <summary>
+        /// 解析地址类型
+        /// </summary>
+        /// <param name="address"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         public static PanasonicAddress ParseAddress (string address) {
             if (string.IsNullOrWhiteSpace(address))
                 throw new ArgumentException("地址为空");
@@ -187,6 +262,12 @@ namespace Plugin.Panasonic {
             throw new ArgumentException("无法解析的松下地址: " + address);
         }
 
+        /// <summary>
+        /// 解析地址为16进制
+        /// </summary>
+        /// <param name="a"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         private static PanasonicAddress ParseRelay (string a) {
             string body = a.Substring(1);
             if (string.IsNullOrEmpty(body))
@@ -220,6 +301,15 @@ namespace Plugin.Panasonic {
             };
         }
 
+        /// <summary>
+        /// 解析地址编号
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="prefixLen"></param>
+        /// <param name="area"></param>
+        /// <param name="isBit"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         private static PanasonicAddress ParseNumbered (
             string a, int prefixLen, PanasonicArea area, bool isBit) {
             string body = a.Substring(prefixLen);
@@ -233,6 +323,13 @@ namespace Plugin.Panasonic {
                 IsBit = isBit
             };
         }
+        /// <summary>
+        /// 读取Int节点
+        /// </summary>
+        /// <param name="json"></param>
+        /// <param name="key"></param>
+        /// <param name="defaultValue"></param>
+        /// <returns></returns>
 
         private static int ReadIntField (string json, string key, int defaultValue) {
             if (string.IsNullOrWhiteSpace(json))
@@ -260,19 +357,5 @@ namespace Plugin.Panasonic {
             _disposed = true;
             Disconnect();
         }
-    }
-
-    internal enum PanasonicArea {
-        X,
-        Y,
-        R,
-        DT,
-        WR
-    }
-
-    internal struct PanasonicAddress {
-        public PanasonicArea Area;
-        public int Index;
-        public bool IsBit;
     }
 }

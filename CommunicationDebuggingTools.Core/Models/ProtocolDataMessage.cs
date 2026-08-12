@@ -1,5 +1,7 @@
 ﻿using CommunicationDebuggingTools.Core.Enums;
 
+
+
 namespace CommunicationDebuggingTools.Core.Models {
     /// <summary>
     /// 协议读写共性报文。
@@ -43,6 +45,9 @@ namespace CommunicationDebuggingTools.Core.Models {
         /// <summary>失败时的错误说明。</summary>
         public string ErrorMessage { get; set; }
 
+        /// <summary>
+        /// 构造函数
+        /// </summary>
         public ProtocolDataMessage () {
             Address = "";
             DataType = VariableDataType.Int16;
