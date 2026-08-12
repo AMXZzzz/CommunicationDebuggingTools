@@ -135,7 +135,11 @@ namespace Plugin.Panasonic {
                 default:
                     throw new ArgumentException("非接点区: " + addr.Area);
             }
-            return area + addr.Index.ToString("D5");
+            // MEWTOCOL-COM 标准：接点编号为 4 位十进制（0000-8999）
+            if (addr.Index > 9999)
+                throw new ArgumentOutOfRangeException("addr.Index",
+                    "MEWTOCOL 接点编号超出范围(0-9999): " + addr.Index);
+            return area + addr.Index.ToString("D4");
         }
 
         /// <summary>
@@ -143,11 +147,15 @@ namespace Plugin.Panasonic {
         /// WR 使用 W + 5 位（按设备文档可再调）。
         /// </summary>
         public static string FormatDataAddr (PanasonicAddress addr) {
+            // MEWTOCOL-COM 标准：数据寄存器地址为 4 位十进制（0000-9999）
+            if (addr.Index > 9999)
+                throw new ArgumentOutOfRangeException("addr.Index",
+                    "MEWTOCOL 数据地址超出范围(0-9999): " + addr.Index);
             switch (addr.Area) {
                 case PanasonicArea.DT:
-                    return "D" + addr.Index.ToString("D5");
+                    return "D" + addr.Index.ToString("D4");
                 case PanasonicArea.WR:
-                    return "W" + addr.Index.ToString("D5");
+                    return "W" + addr.Index.ToString("D4");
                 default:
                     throw new ArgumentException("非数据区: " + addr.Area);
             }

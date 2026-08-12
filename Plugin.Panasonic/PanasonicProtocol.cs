@@ -118,9 +118,7 @@ namespace Plugin.Panasonic {
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
-                // 成功后记住写入值
-                if (request.Value == null)
-                    request.Value = request.Value;
+                // request.Value 已由调用方填入待写入值，此处保留不变
                 return Task.FromResult(request);
             } catch (OperationCanceledException) {
                 return Task.FromResult(Fail(request, "已取消"));
@@ -144,13 +142,22 @@ namespace Plugin.Panasonic {
                 throw new Exception("异常响应: " + resp.Trim());
         }
 
-        /// <summary>从响应中取接点 0/1。</summary>
+        /// <summary>
+        /// 从响应中取接点 0/1。
+        /// 帧格式：%SS$RCS[V][BCC2]
+        /// V 固定在倒数第 3 位（BCC 占末尾 2 位），按位置读取，避免误读 BCC。
+        /// </summary>
         private static bool ParseContactValue (string resp) {
-            for (int i = resp.Length - 1; i >= 0; i--) {
-                if (resp[i] == '0' || resp[i] == '1')
-                    return resp[i] == '1';
-            }
-            throw new Exception("无法解析接点值: " + resp);
+            // 最短合法帧：%01$RCS0AB = 10 字符
+            if (resp == null || resp.Length < 10)
+                throw new Exception("响应帧过短，无法解析接点值: " + resp);
+
+            // 值字符在倒数第 3 位（索引 Length-3）
+            char v = resp[resp.Length - 3];
+            if (v == '1') return true;
+            if (v == '0') return false;
+
+            throw new Exception("接点值字符非法('" + v + "'): " + resp);
         }
 
         /// <summary>从响应中取末尾 4 位十六进制作为一字。</summary>
