@@ -66,8 +66,8 @@ namespace Plugin.Panasonic {
                     EnsureOk(resp);
                     request.Value = ParseContactValue(resp);
                 } else {
-                    // RD + 地址 + 字数(0001)
-                    string cmd = "RD" + PanasonicSession.FormatDataAddr(addr) + "0001";
+                    // RD + 地址 + 字数(01)
+                    string cmd = "RD" + PanasonicSession.FormatDataAddr(addr) + "01"; // MEWTOCOL 字数为 2位十六进制
                     string resp = _session.Transact(cmd);
                     EnsureOk(resp);
                     ushort word = ParseDataWord(resp);
@@ -105,11 +105,11 @@ namespace Plugin.Panasonic {
                     string resp = _session.Transact(cmd);
                     EnsureOk(resp);
                 } else {
-                    // 写数据字：WD + 地址 + 字数(0001) + 数据
+                    // 写数据字：WD + 地址 + 字数(01) + 数据
                     ushort word = ToUInt16(request.Value);
                     string cmd = "WD"
                                 + PanasonicSession.FormatDataAddr(addr)
-                                + "0001"                          // 1 个字
+                                + "01"                            // 1 个字（MEWTOCOL 字数为 2位十六进制）
                                 + word.ToString("X4");
                     string resp = _session.Transact(cmd);
                     EnsureOk(resp);

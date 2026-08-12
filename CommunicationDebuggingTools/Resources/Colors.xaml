@@ -212,7 +212,14 @@
     <SolidColorBrush x:Key="SF.Brush.Var.Type.Bool.Fg" Color="#4EC9B0"/>
     <SolidColorBrush x:Key="SF.Brush.Var.Type.Int16.Bg" Color="#1A2A3D"/>
     <SolidColorBrush x:Key="SF.Brush.Var.Type.Int16.Fg" Color="#93C5FD"/>
-    <!-- Int32 / Float / Double / String 同理 -->
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Int32.Bg" Color="#2A1A3D"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Int32.Fg" Color="#C084FC"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Float.Bg" Color="#3D2A1A"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Float.Fg" Color="#FDBA74"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Double.Bg" Color="#3D1A2A"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.Double.Fg" Color="#F9A8D4"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.String.Bg" Color="#2A3D1A"/>
+    <SolidColorBrush x:Key="SF.Brush.Var.Type.String.Fg" Color="#A3E635"/>
 
     <SolidColorBrush x:Key="SF.Brush.Var.Access.R.Bg" Color="#1A2A3D"/>
     <SolidColorBrush x:Key="SF.Brush.Var.Access.R.Fg" Color="#93C5FD"/>
