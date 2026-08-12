@@ -1,21 +1,24 @@
 ﻿using System;
 using System.Globalization;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Plugin.Panasonic {
     /// <summary>
-    /// 松下 MEWTOCOL 会话：站号、地址解析、TCP。
-    /// 报文收发可在本类后续补全。
+    /// 松下 MEWTOCOL-COM 会话：站号、地址解析、TCP、报文收发。
+    /// 帧格式：% + 站号(2位十六进制) + # + 命令 + BCC(2位十六进制) + CR
+    /// BCC：对「站号+#命令」整段逐字节异或。
     /// </summary>
     internal sealed class PanasonicSession : IDisposable {
         private TcpClient _tcp;
         private NetworkStream _stream;
         private int _timeoutMs = 3000;
         private bool _disposed;
+        private readonly object _sync = new object();
 
-        /// <summary>MEWTOCOL 站号（1–99 等，按设备约定）。</summary>
+        /// <summary>MEWTOCOL 站号（1–99）。</summary>
         public int Station { get; private set; } = 1;
 
         public bool IsConnected =>
@@ -26,7 +29,6 @@ namespace Plugin.Panasonic {
             set => _timeoutMs = value < 500 ? 500 : value;
         }
 
-        /// <summary>从 ProtocolSettingsJson 读取 station。</summary>
         public void ApplySettingsJson (string json) {
             Station = ReadIntField(json, "station", 1);
             if (Station < 0) Station = 0;
@@ -67,11 +69,92 @@ namespace Plugin.Panasonic {
             try { if (_tcp != null) { _tcp.Close(); _tcp = null; } } catch { }
         }
 
+        // -------------------- 报文 --------------------
+
         /// <summary>
-        /// 解析松下地址。支持：
-        /// X0 / Y0 / R100 / R1A（十六进制触点）/
-        /// DT0 / DT100 / WR0
+        /// 发送命令正文（不含站号/#/%/BCC），返回 PLC 响应 ASCII（到 CR）。
+        /// 例：commandBody = "WCSR001001"
         /// </summary>
+        public string Transact (string commandBody) {
+            if (string.IsNullOrEmpty(commandBody))
+                throw new ArgumentException("命令为空");
+            if (!IsConnected)
+                throw new InvalidOperationException("未连接");
+
+            // payload = SS + # + CMD
+            string payload = Station.ToString("X2") + "#" + commandBody;
+            string frame = "%" + payload + CalcBcc(payload) + "\r";
+            byte[] send = Encoding.ASCII.GetBytes(frame);
+
+            lock (_sync) {
+                _stream.Write(send, 0, send.Length);
+                _stream.Flush();
+                return ReadLineCr();
+            }
+        }
+
+        /// <summary>读到 CR 为止（不含 CR）。</summary>
+        private string ReadLineCr () {
+            var sb = new StringBuilder(64);
+            var buf = new byte[1];
+            int guard = 0;
+            while (guard++ < 4096) {
+                int n = _stream.Read(buf, 0, 1);
+                if (n <= 0)
+                    throw new Exception("连接已断开或读超时");
+                char c = (char)buf[0];
+                if (c == '\r')
+                    break;
+                if (c == '\n')
+                    continue;
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>BCC = payload 每个字符异或，输出 2 位大写十六进制。</summary>
+        public static string CalcBcc (string payload) {
+            int xor = 0;
+            for (int i = 0; i < payload.Length; i++)
+                xor ^= (byte)payload[i];
+            return xor.ToString("X2");
+        }
+
+        // -------------------- 地址格式（组命令用） --------------------
+
+        /// <summary>
+        /// 接点地址：区号 + 5 位十进制。
+        /// R100 → R00100；X0 → X00000；Y10 → Y00010
+        /// </summary>
+        public static string FormatContact (PanasonicAddress addr) {
+            char area;
+            switch (addr.Area) {
+                case PanasonicArea.X: area = 'X'; break;
+                case PanasonicArea.Y: area = 'Y'; break;
+                case PanasonicArea.R: area = 'R'; break;
+                default:
+                    throw new ArgumentException("非接点区: " + addr.Area);
+            }
+            return area + addr.Index.ToString("D5");
+        }
+
+        /// <summary>
+        /// 数据区地址：常见 WD/RD 使用 D + 5 位（DT200 → D00200）。
+        /// WR 使用 W + 5 位（按设备文档可再调）。
+        /// </summary>
+        public static string FormatDataAddr (PanasonicAddress addr) {
+            switch (addr.Area) {
+                case PanasonicArea.DT:
+                    return "D" + addr.Index.ToString("D5");
+                case PanasonicArea.WR:
+                    return "W" + addr.Index.ToString("D5");
+                default:
+                    throw new ArgumentException("非数据区: " + addr.Area);
+            }
+        }
+
+        // -------------------- 解析（原有） --------------------
+
         public static PanasonicAddress ParseAddress (string address) {
             if (string.IsNullOrWhiteSpace(address))
                 throw new ArgumentException("地址为空");
@@ -96,16 +179,12 @@ namespace Plugin.Panasonic {
             throw new ArgumentException("无法解析的松下地址: " + address);
         }
 
-        /// <summary>
-        /// R 区：十进制 R100，或十六进制触点 R1A（含 A–F）。
-        /// </summary>
         private static PanasonicAddress ParseRelay (string a) {
             string body = a.Substring(1);
             if (string.IsNullOrEmpty(body))
                 throw new ArgumentException("R 地址缺少编号");
 
             int index;
-            // 含 A-F → 按十六进制（如 R1A）
             bool hasHexLetter = false;
             for (int i = 0; i < body.Length; i++) {
                 char c = body[i];
