@@ -22,6 +22,14 @@ namespace CommunicationDebuggingTools.Business.Device {
         private readonly Dictionary<string, CancellationTokenSource> _connectCts =
             new Dictionary<string, CancellationTokenSource>();
 
+        // 连续通讯失败计数；达到阈值时标为 Error（ALARM），成功时归零
+        private readonly Dictionary<string, int> _commErrors =
+            new Dictionary<string, int>();
+        private const int COMM_ERROR_THRESHOLD = 3;
+
+        // PingAsync 回调需要 Post 回 UI 线程
+        private readonly System.Threading.SynchronizationContext _uiContext;
+
         public ObservableCollection<DeviceInfo> Devices { get; private set; }
 
         public DeviceService (IProtocolResolver resolver, IDeviceRepository repository) {
@@ -33,6 +41,7 @@ namespace CommunicationDebuggingTools.Business.Device {
             _resolver = resolver;
             _repository = repository;
             Devices = new ObservableCollection<DeviceInfo>();
+            _uiContext = System.Threading.SynchronizationContext.Current;
         }
 
 
@@ -179,9 +188,7 @@ namespace CommunicationDebuggingTools.Business.Device {
             }
         }
 
-        /// <summary>
-        /// 取消进行中的连接，并释放已建立的会话。
-        /// </summary>
+        /// <summary>取消进行中的连接，并释放已建立的会话。</summary>
         public void Disconnect (string id) {
             if (string.IsNullOrEmpty(id))
                 return;
@@ -200,20 +207,82 @@ namespace CommunicationDebuggingTools.Business.Device {
         }
 
         /// <summary>
-        /// 检查所有已连接会话是否仍然存活，将已断线的设备标为离线。
-        /// 在 UI 线程（DispatcherTimer 回调）中调用，天然无跨线程问题。
+        /// 通讯成功：清零连续失败计数，若设备处于 Error 状态则恢复为 Success。
+        /// 在 UI 线程（VariableService 回调）中调用。
+        /// </summary>
+        public void ReportCommSuccess (string deviceId) {
+            if (string.IsNullOrEmpty(deviceId)) return;
+            _commErrors[deviceId] = 0;
+
+            DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
+            if (device != null && device.IsConnected
+                    && device.StatusType == DeviceStatusType.Error)
+                device.StatusType = DeviceStatusType.Success;
+        }
+
+        /// <summary>
+        /// 通讯失败：累加连续失败计数。
+        /// 达到 <see cref="COMM_ERROR_THRESHOLD"/> 次后将设备标为 Error（ALARM）。
+        /// TCP 断线时直接调 <see cref="Disconnect"/>，无需走此方法。
+        /// 在 UI 线程（VariableService 回调）中调用。
+        /// </summary>
+        public void ReportCommError (string deviceId) {
+            if (string.IsNullOrEmpty(deviceId)) return;
+
+            int count;
+            _commErrors.TryGetValue(deviceId, out count);
+            _commErrors[deviceId] = ++count;
+
+            if (count < COMM_ERROR_THRESHOLD) return;
+
+            DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
+            if (device != null && device.IsConnected
+                    && device.StatusType != DeviceStatusType.Error)
+                device.StatusType = DeviceStatusType.Error;
+        }
+
+        /// <summary>
+        /// 检查所有已连接会话（DispatcherTimer 每 3 秒在 UI 线程上调用）。
+        /// 直接调 PingAsync —— 各协议内部已合并了 TCP 层（Socket.Poll）
+        /// 和协议层（实际读请求）两层检测，此处无需重复判断。
         /// </summary>
         public void CheckConnections () {
             foreach (string id in _sessions.Keys.ToList()) {
                 IProtocol protocol;
                 if (!_sessions.TryGetValue(id, out protocol)) continue;
-                if (protocol.IsConnected) continue;
 
-                DeviceInfo device = Devices.FirstOrDefault(d => d.Id == id);
-                if (device == null || !device.IsConnected) continue;
+                string capturedId = id;
+                IProtocol capturedProto = protocol;
 
-                Disconnect(id);   // 在 UI 线程上调用，直接安全
+                // 在后台线程执行 PingAsync（含真实 I/O），完成后回 UI 线程处理结果
+                System.Threading.Tasks.Task.Run(async () => {
+                    bool ok = await capturedProto.PingAsync(
+                        System.Threading.CancellationToken.None);
+
+                    void handle () => OnPingResult(capturedId, capturedProto, ok);
+
+                    if (_uiContext != null) _uiContext.Post(_ => handle(), null);
+                    else handle();
+                });
             }
+        }
+
+        /// <summary>
+        /// PingAsync 回调，在 UI 线程执行。
+        /// ok=true  → 通讯正常，清零错误计数，恢复 RUN。
+        /// ok=false → 再次查 IsConnected 区分「TCP 断线」和「通讯异常」：
+        ///            断线 → Disconnect（OFFLINE）；通讯异常 → ReportCommError（累计到 ALARM）。
+        /// </summary>
+        private void OnPingResult (string deviceId, IProtocol protocol, bool ok) {
+            if (ok) {
+                ReportCommSuccess(deviceId);
+                return;
+            }
+            // PingAsync 返回 false：TCP 断线 or 协议层失败
+            if (!protocol.IsConnected)
+                Disconnect(deviceId);         // TCP 断线 → OFFLINE
+            else
+                ReportCommError(deviceId);    // 协议层失败 → 计数，达阈值 → ALARM
         }
 
         /// <summary>断开全部设备及残留会话。</summary>

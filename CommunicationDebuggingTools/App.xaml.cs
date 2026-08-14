@@ -19,7 +19,13 @@ namespace CommunicationDebuggingTools {
             _heartbeat = new DispatcherTimer {
                 Interval = TimeSpan.FromSeconds(3)
             };
-            _heartbeat.Tick += (s, ev) => MyAppServices.Devices?.CheckConnections();
+
+            //! 匿名方法中使用 MyAppServices.Devices?.CheckConnections()，
+            //而非直接使用 MyAppServices.Devices.CheckConnections()，
+            //是为了避免在 MyAppServices.Devices 为 null 时抛出 NullReferenceException 异常。
+            //通过使用 null 条件运算符（?.），当 MyAppServices.Devices 为 null 时，整个表达式将返回 null，
+            //而不会调用 CheckConnections() 方法，从而避免了异常的发生。
+            _heartbeat.Tick +=          (s, ev) => MyAppServices.Devices?.CheckConnections();
             _heartbeat.Start();
         }
 

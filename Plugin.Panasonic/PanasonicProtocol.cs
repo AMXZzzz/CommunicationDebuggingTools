@@ -18,16 +18,13 @@ namespace Plugin.Panasonic {
     ///   Double → 4 个字（count = 04）
     /// </summary>
     public sealed class PanasonicProtocol : IProtocol, IProtocolDataAccess, IDisposable {
-        //! 底层西医
         private readonly PanasonicSession _session = new PanasonicSession();
-        //!连接状态
         private bool _disposed;
-        //! 连接状态
+
         public bool IsConnected => _session.IsConnected;
-        //! 协议名称
+
         public string GetProtocolName () => "Panasonic MEWTOCOL";
 
-        //! 连接
         public async Task<bool> ConnectAsync (
             ProtocolConnectionContext context,
             CancellationToken cancellationToken) {
@@ -50,9 +47,6 @@ namespace Plugin.Panasonic {
             }
         }
 
-        /// <summary>
-        /// 关闭连接状态
-        /// </summary>
         public void Disconnect () => _session.Disconnect();
 
         // ══════════════════════════════════════════════
@@ -61,35 +55,28 @@ namespace Plugin.Panasonic {
         public Task<ProtocolDataMessage> ReadAsync (
             ProtocolDataMessage request,
             CancellationToken cancellationToken) {
-
-            //! 校验
             if (request == null) throw new ArgumentNullException("request");
             if (!_session.IsConnected) return Task.FromResult(Fail(request, "未连接"));
 
             try {
-                //! 检查取消请求令牌
                 cancellationToken.ThrowIfCancellationRequested();
-
-                //! 获取ip地址
                 PanasonicAddress addr = PanasonicSession.ParseAddress(request.Address);
 
-                // ── 线圈 ──
+                // ── 触点 ──
                 if (addr.IsBit || request.DataType == VariableDataType.Bool) {
-                    string cmd  = "RCS" + PanasonicSession.FormatContact(addr); //! 拼接命令字符串
-                    string resp = _session.Transact(cmd);                       //! 发送命令并获取响应
-                    EnsureOk(resp);                                             //! 解析返回的报文 
-                    request.Value = ParseContactValue(resp);                    //! 解析返回的值
+                    string cmd  = "RCS" + PanasonicSession.FormatContact(addr);
+                    string resp = _session.Transact(cmd);
+                    EnsureOk(resp);
+                    request.Value = ParseContactValue(resp);
                 }
-
                 // ── 32位：Float / Int32 / UInt32 ──
                 else if (Is32Bit(request.DataType)) {
                     string cmd  = "RD" + PanasonicSession.FormatDataAddr(addr) + "02";
                     string resp = _session.Transact(cmd);
                     EnsureOk(resp);
                     string hex  = ExtractRdHex(resp, 2);
-                    request.Value = Decode32(hex, request.DataType, request.WordOrder);     //! 根据数据类型和字顺序解码返回的十六进制字符串
+                    request.Value = Decode32(hex, request.DataType, request.WordOrder);
                 }
-
                 // ── 64位：Double ──
                 else if (request.DataType == VariableDataType.Double) {
                     string cmd  = "RD" + PanasonicSession.FormatDataAddr(addr) + "04";
@@ -98,7 +85,6 @@ namespace Plugin.Panasonic {
                     string hex  = ExtractRdHex(resp, 4);
                     request.Value = DecodeDouble(hex, request.WordOrder);
                 }
-
                 // ── 16位：Int16 / UInt16 及其他 ──
                 else {
                     string cmd  = "RD" + PanasonicSession.FormatDataAddr(addr) + "01";
@@ -108,14 +94,10 @@ namespace Plugin.Panasonic {
                     ushort word = ushort.Parse(hex, NumberStyles.HexNumber);
                     request.Value = ConvertWord16(word, request.DataType);
                 }
-                //! 字符串
 
-                //! 设置请求结果
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
-
-                //! 返回请求结果
                 return Task.FromResult(request);
             } catch (OperationCanceledException) {
                 return Task.FromResult(Fail(request, "已取消"));
@@ -130,8 +112,6 @@ namespace Plugin.Panasonic {
         public Task<ProtocolDataMessage> WriteAsync (
             ProtocolDataMessage request,
             CancellationToken cancellationToken) {
-
-
             if (request == null) throw new ArgumentNullException("request");
             if (!_session.IsConnected) return Task.FromResult(Fail(request, "未连接"));
 
@@ -148,7 +128,6 @@ namespace Plugin.Panasonic {
                     string resp = _session.Transact(cmd);
                     EnsureOk(resp);
                 }
-
                 // ── 32位：Float / Int32 / UInt32 ──
                 else if (Is32Bit(request.DataType)) {
                     string data = Encode32(request.Value, request.DataType, request.WordOrder);
@@ -183,7 +162,6 @@ namespace Plugin.Panasonic {
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
-
                 return Task.FromResult(request);
             } catch (OperationCanceledException) {
                 return Task.FromResult(Fail(request, "已取消"));
@@ -348,6 +326,7 @@ namespace Plugin.Panasonic {
         // ══════════════════════════════════════════════
         //  16位转换
         // ══════════════════════════════════════════════
+
         private static object ConvertWord16 (ushort word, VariableDataType t) {
             switch (t) {
                 case VariableDataType.Int16: return (short)word;
@@ -355,7 +334,6 @@ namespace Plugin.Panasonic {
                 default: return word;
             }
         }
-
 
         // ══════════════════════════════════════════════
         //  值类型转换辅助
@@ -431,6 +409,22 @@ namespace Plugin.Panasonic {
             return request;
         }
 
+
+        /// <summary>
+        /// 探针：先做 Socket.Poll 快速判断 TCP 层，通了再发 RCS R0000 验证协议层。
+        /// 返回 false 可能是 TCP 断线也可能是通讯异常，调用方通过 IsConnected 区分。
+        /// </summary>
+        public Task<bool> PingAsync (System.Threading.CancellationToken cancellationToken) {
+            // ① TCP 层：Socket.Poll，零 I/O，毫秒级
+            if (!IsConnected) return Task.FromResult(false);
+            // ② 协议层：读 R0000（安全地址，无副作用）
+            try {
+                string resp = _session.Transact("RCSR0000");
+                return Task.FromResult(resp != null && resp.IndexOf('$') >= 0);
+            } catch {
+                return Task.FromResult(false);
+            }
+        }
         public void Dispose () {
             if (_disposed) return;
             _disposed = true;

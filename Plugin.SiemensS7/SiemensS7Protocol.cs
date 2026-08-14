@@ -434,6 +434,24 @@ namespace Plugin.SiemensS7 {
             return req;
         }
 
+
+        /// <summary>
+        /// 探针：先做 Socket.Poll 检测 TCP 层，通了再读 MB0 验证 S7 通讯层。
+        /// </summary>
+        public Task<bool> PingAsync (System.Threading.CancellationToken cancellationToken) {
+            // ① TCP 层
+            if (!IsConnected) return Task.FromResult(false);
+            // ② S7 协议层：读 MB0（M 区字节 0，安全地址）
+            try {
+                cancellationToken.ThrowIfCancellationRequested();
+                S7Address addr = SiemensS7Session.ParseAddress("MB0");
+                byte[] job  = BuildReadJob(addr, TS_BYTE, 1, _session.NextRef());
+                byte[] resp = _session.Transact(job);
+                return Task.FromResult(resp != null && resp.Length > 1 && resp[1] == 0x03);
+            } catch {
+                return Task.FromResult(false);
+            }
+        }
         public void Dispose () {
             if (_disposed) return;
             _disposed = true;

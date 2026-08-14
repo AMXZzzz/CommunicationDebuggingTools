@@ -33,5 +33,12 @@ namespace CommunicationDebuggingTools.Core.Interfaces {
 
         /// <summary>断开会话并释放底层资源。</summary>
         void Disconnect ();
+
+        /// <summary>
+        /// 发送一次轻量探针请求验证通讯是否正常（不需要配置变量）。
+        /// 实现上通常读一个固定的安全地址（如 R0、M0、DB1.DBB0）。
+        /// 返回 true = 通讯正常；false = 通讯失败（连接可能仍在但 PLC 无响应）。
+        /// </summary>
+        Task<bool> PingAsync (System.Threading.CancellationToken cancellationToken);
     }
 }

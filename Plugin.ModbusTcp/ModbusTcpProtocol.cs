@@ -318,6 +318,22 @@ namespace Plugin.ModbusTcp {
         }
 
         /// <summary>释放底层会话。</summary>
+
+        /// <summary>
+        /// 探针：先做 Socket.Poll 检测 TCP 层，通了再 FC01 读线圈 0 验证 Modbus 通讯层。
+        /// </summary>
+        public Task<bool> PingAsync (System.Threading.CancellationToken cancellationToken) {
+            // ① TCP 层
+            if (!IsConnected) return Task.FromResult(false);
+            // ② Modbus 协议层：FC01 读单个线圈（无副作用）
+            try {
+                cancellationToken.ThrowIfCancellationRequested();
+                byte[] resp = _session.Execute(0x01, new byte[] { 0x00, 0x00, 0x00, 0x01 });
+                return Task.FromResult(resp != null && resp.Length > 0);
+            } catch {
+                return Task.FromResult(false);
+            }
+        }
         public void Dispose () {
             if (_disposed)
                 return;
