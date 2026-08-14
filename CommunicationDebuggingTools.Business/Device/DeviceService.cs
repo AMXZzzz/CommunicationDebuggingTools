@@ -30,7 +30,11 @@ namespace CommunicationDebuggingTools.Business.Device {
         // PingAsync 回调需要 Post 回 UI 线程
         private readonly System.Threading.SynchronizationContext _uiContext;
 
+        private int _pinging;
+        private CancellationTokenSource _pingCts;
+
         public ObservableCollection<DeviceInfo> Devices { get; private set; }
+
 
         public DeviceService (IProtocolResolver resolver, IDeviceRepository repository) {
             if (resolver == null)
@@ -57,6 +61,8 @@ namespace CommunicationDebuggingTools.Business.Device {
 
         /// <summary>重新加载设备列表；先断开全部会话，状态一律离线。</summary>
         public void Load () {
+            try { _pingCts?.Cancel(); } catch { }
+
             DisconnectAll();
             Devices.Clear();
 
@@ -247,24 +253,58 @@ namespace CommunicationDebuggingTools.Business.Device {
         /// 和协议层（实际读请求）两层检测，此处无需重复判断。
         /// </summary>
         public void CheckConnections () {
-            foreach (string id in _sessions.Keys.ToList()) {
-                IProtocol protocol;
-                if (!_sessions.TryGetValue(id, out protocol)) continue;
+            // 上一轮未完成则跳过，避免 Task 堆积
+            if (Interlocked.CompareExchange(ref _pinging, 1, 0) != 0)
+                return;
 
-                string capturedId = id;
-                IProtocol capturedProto = protocol;
-
-                // 在后台线程执行 PingAsync（含真实 I/O），完成后回 UI 线程处理结果
-                System.Threading.Tasks.Task.Run(async () => {
-                    bool ok = await capturedProto.PingAsync(
-                        System.Threading.CancellationToken.None);
-
-                    void handle () => OnPingResult(capturedId, capturedProto, ok);
-
-                    if (_uiContext != null) _uiContext.Post(_ => handle(), null);
-                    else handle();
-                });
+            CancellationTokenSource cts = _pingCts;
+            if (cts != null) {
+                try { cts.Cancel(); } catch { }
+                try { cts.Dispose(); } catch { }
             }
+            _pingCts = new CancellationTokenSource();
+            CancellationToken token = _pingCts.Token;
+
+            List<string> ids = _sessions.Keys.ToList();
+            if (ids.Count == 0) {
+                Interlocked.Exchange(ref _pinging, 0);
+                return;
+            }
+
+            Task.Run(async () => {
+                try {
+                    foreach (string id in ids) {
+                        if (token.IsCancellationRequested)
+                            break;
+
+                        IProtocol protocol;
+                        if (!_sessions.TryGetValue(id, out protocol) || protocol == null)
+                            continue;
+
+                        bool ok = false;
+                        try {
+                            ok = await protocol.PingAsync(token).ConfigureAwait(false);
+                        } catch (OperationCanceledException) {
+                            break;
+                        } catch {
+                            ok = false;
+                        }
+
+                        string capturedId = id;
+                        IProtocol capturedProto = protocol;
+                        bool capturedOk = ok;
+
+                        void handle () => OnPingResult(capturedId, capturedProto, capturedOk);
+
+                        if (_uiContext != null)
+                            _uiContext.Post(_ => handle(), null);
+                        else
+                            handle();
+                    }
+                } finally {
+                    Interlocked.Exchange(ref _pinging, 0);
+                }
+            }, token);
         }
 
         /// <summary>

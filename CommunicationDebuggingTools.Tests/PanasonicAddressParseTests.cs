@@ -57,10 +57,12 @@ namespace CommunicationDebuggingTools.Tests {
             Assert.IsFalse(a.IsBit);
         }
 
+
         [TestMethod]
         public void Parse_IgnoreCaseAndSpaces () {
-            var a = PanasonicSession.ParseAddress(" r1a ");
-            Assert.AreEqual(0x1A, a.Index);
+            var a = PanasonicSession.ParseAddress(" r10a ");
+            Assert.AreEqual(10, a.Index);
+            Assert.AreEqual(0xA, a.BitIndex);
         }
 
         [TestMethod]
@@ -74,6 +76,33 @@ namespace CommunicationDebuggingTools.Tests {
         public void Parse_UnknownPrefix_ShouldThrow () {
             PanasonicSession.ParseAddress("ZZ0");
         }
+
+        [TestMethod]
+        public void Parse_R10A_ShouldBeWordAndBit () {
+            var a = PanasonicSession.ParseAddress("R10A");
+            Assert.AreEqual(PanasonicArea.R, a.Area);
+            Assert.AreEqual(10, a.Index);
+            Assert.AreEqual(0xA, a.BitIndex);
+            Assert.IsTrue(a.IsBit);
+            Assert.AreEqual("R010A", PanasonicSession.FormatContact(a));
+        }
+
+        [TestMethod]
+        public void Parse_R1A_ShouldBeWord1BitA () {
+            var a = PanasonicSession.ParseAddress("R1A");
+            Assert.AreEqual(1, a.Index);
+            Assert.AreEqual(0xA, a.BitIndex);
+            Assert.AreEqual("R001A", PanasonicSession.FormatContact(a));
+        }
+
+        [TestMethod]
+        public void Parse_R100_ShouldBeDecimalContact () {
+            var a = PanasonicSession.ParseAddress("R100");
+            Assert.AreEqual(100, a.Index);
+            Assert.AreEqual(-1, a.BitIndex);
+            Assert.AreEqual("R00100", PanasonicSession.FormatContact(a));
+        }
+
     }
 
     /// <summary>可选：加载松下插件 dll。</summary>

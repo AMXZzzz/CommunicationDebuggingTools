@@ -1,5 +1,6 @@
-﻿using System.ComponentModel;
-using CommunicationDebuggingTools.Core.Enums;
+﻿using CommunicationDebuggingTools.Core.Enums;
+using System.ComponentModel;
+using System.Threading;
 
 namespace CommunicationDebuggingTools.Core.Models {
     /// <summary>

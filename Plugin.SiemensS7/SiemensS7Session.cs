@@ -14,6 +14,7 @@ namespace Plugin.SiemensS7 {
         private bool          _disposed;
         private ushort        _pduRef;
 
+        private readonly object _sync = new object();
         public int Rack { get; private set; }
         public int Slot { get; private set; } = 1;
 
@@ -99,15 +100,21 @@ namespace Plugin.SiemensS7 {
         // ════════════════════════════════════════════════
         public byte[] Transact (byte[] s7Job) {
             if (!IsConnected) throw new InvalidOperationException("未连接");
-            SendTpkt(WrapDt(s7Job));
-            byte[] resp = ReadTpkt();
-            byte[] s7   = ExtractS7(resp);
-            if (s7 == null)
-                throw new Exception("无效响应");
-            return s7;
+            lock (_sync) {
+                SendTpkt(WrapDt(s7Job));
+                byte[] resp = ReadTpkt();
+                byte[] s7 = ExtractS7(resp);
+                if (s7 == null)
+                    throw new Exception("无效响应");
+                return s7;
+            }
         }
 
-        public ushort NextRef () { return ++_pduRef; }
+
+        public ushort NextRef () {
+            lock (_sync)
+                return ++_pduRef;
+        }
 
         // ════════════════════════════════════════════════
         //  PDU 构造辅助

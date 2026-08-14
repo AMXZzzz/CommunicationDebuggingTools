@@ -142,8 +142,8 @@ namespace Plugin.Panasonic {
         // -------------------- 地址格式（组命令用） --------------------
 
         /// <summary>
-        /// 接点地址：区号 + 5 位十进制。
-        /// R100 → R00100；X0 → X00000；Y10 → Y00010
+        /// 接点组帧后缀。
+        /// R100 → R00100；R10A → R010A（字3位十进制 + 位1位十六进制）；X0 → X00000。
         /// </summary>
         public static string FormatContact (PanasonicAddress addr) {
             char area;
@@ -154,6 +154,10 @@ namespace Plugin.Panasonic {
                 default:
                     throw new ArgumentException("非接点区: " + addr.Area);
             }
+
+            if (addr.Area == PanasonicArea.R && addr.BitIndex >= 0)
+                return area + addr.Index.ToString("D3") + addr.BitIndex.ToString("X1");
+
             return area + addr.Index.ToString("D5");
         }
 
@@ -203,30 +207,46 @@ namespace Plugin.Panasonic {
             if (string.IsNullOrEmpty(body))
                 throw new ArgumentException("R 地址缺少编号");
 
-            int index;
-            bool hasHexLetter = false;
+            // 含 A–F：末位为十六进制位号，前面为十进制字号（R10A = 字10 位A）
+            char last = body[body.Length - 1];
+            if (last >= 'A' && last <= 'F') {
+                if (body.Length < 2)
+                    throw new ArgumentException("R 位地址格式无效: " + a);
+
+                string wordPart = body.Substring(0, body.Length - 1);
+                for (int i = 0; i < wordPart.Length; i++) {
+                    if (!char.IsDigit(wordPart[i]))
+                        throw new ArgumentException("R 字号非法: " + a);
+                }
+
+                int word;
+                if (!int.TryParse(wordPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out word) || word < 0)
+                    throw new ArgumentException("R 字号无效: " + a);
+
+                int bit = Convert.ToInt32(last.ToString(), 16);
+
+                return new PanasonicAddress {
+                    Area = PanasonicArea.R,
+                    Index = word,
+                    BitIndex = bit,
+                    IsBit = true
+                };
+            }
+
+            // 纯数字：十进制接点号 R100
             for (int i = 0; i < body.Length; i++) {
-                char c = body[i];
-                if (c >= 'A' && c <= 'F')
-                    hasHexLetter = true;
-                else if (!char.IsDigit(c))
+                if (!char.IsDigit(body[i]))
                     throw new ArgumentException("R 地址非法: " + a);
             }
 
-            if (hasHexLetter) {
-                if (!int.TryParse(body, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out index))
-                    throw new ArgumentException("R 十六进制地址无效: " + a);
-            } else {
-                if (!int.TryParse(body, NumberStyles.Integer, CultureInfo.InvariantCulture, out index))
-                    throw new ArgumentException("R 地址无效: " + a);
-            }
-
-            if (index < 0)
-                throw new ArgumentException("R 地址不能为负");
+            int index;
+            if (!int.TryParse(body, NumberStyles.Integer, CultureInfo.InvariantCulture, out index) || index < 0)
+                throw new ArgumentException("R 地址无效: " + a);
 
             return new PanasonicAddress {
                 Area = PanasonicArea.R,
                 Index = index,
+                BitIndex = -1,
                 IsBit = true
             };
         }
@@ -283,7 +303,10 @@ namespace Plugin.Panasonic {
 
     internal struct PanasonicAddress {
         public PanasonicArea Area;
+        /// <summary>十进制接点号，或 word+bit 时的字号。</summary>
         public int Index;
+        /// <summary>位号 0–15；-1 表示纯十进制接点（如 R100）。</summary>
+        public int BitIndex;
         public bool IsBit;
     }
 }
