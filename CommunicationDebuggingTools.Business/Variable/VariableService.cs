@@ -104,10 +104,17 @@ namespace CommunicationDebuggingTools.Business.Variable {
             } catch (InvalidOperationException ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
+                CheckAndMarkDisconnected(v.DeviceId);
                 return false;
             } catch (TimeoutException ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
+                CheckAndMarkDisconnected(v.DeviceId);
+                return false;
+            } catch (Exception ex) {
+                v.LastError = ex.Message;
+                v.Quality = DataQuality.Bad;
+                CheckAndMarkDisconnected(v.DeviceId);
                 return false;
             }
 
@@ -117,6 +124,8 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 v.LastValue = result.Value;
                 return true;
             }
+            // 协议层返回失败时也检测一次
+            CheckAndMarkDisconnected(v.DeviceId);
             return false;
         }
 
@@ -146,10 +155,17 @@ namespace CommunicationDebuggingTools.Business.Variable {
             } catch (InvalidOperationException ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
+                CheckAndMarkDisconnected(v.DeviceId);
                 return false;
             } catch (TimeoutException ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
+                CheckAndMarkDisconnected(v.DeviceId);
+                return false;
+            } catch (Exception ex) {
+                v.LastError = ex.Message;
+                v.Quality = DataQuality.Bad;
+                CheckAndMarkDisconnected(v.DeviceId);
                 return false;
             }
 
@@ -160,6 +176,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 return true;
             }
 
+            CheckAndMarkDisconnected(v.DeviceId);
             v.Quality = DataQuality.Bad;
             return false;
         }
@@ -261,6 +278,18 @@ namespace CommunicationDebuggingTools.Business.Variable {
             if (v == null)
                 throw new InvalidOperationException("变量不存在: " + id);
             return v;
+        }
+
+        /// <summary>
+        /// 读写失败后检查协议是否已断线。
+        /// 若 protocol.IsConnected == false，则通知 DeviceService 将设备标为离线。
+        /// </summary>
+        private void CheckAndMarkDisconnected (string deviceId) {
+            try {
+                IProtocol protocol = _devices.GetProtocol(deviceId);
+                if (protocol != null && !protocol.IsConnected)
+                    _devices.Disconnect(deviceId);
+            } catch { }
         }
     }
 }

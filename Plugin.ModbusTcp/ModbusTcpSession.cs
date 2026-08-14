@@ -19,8 +19,19 @@ namespace Plugin.ModbusTcp {
         private int _timeoutMs = 3000;
         private bool _disposed;
 
-        public bool IsConnected =>
-            _tcp != null && _tcp.Connected && _stream != null;
+        public bool IsConnected {
+            get {
+                if (_tcp == null || _stream == null) return false;
+                System.Net.Sockets.Socket s = _tcp.Client;
+                if (s == null || !s.Connected) return false;
+                try {
+                    return !(s.Poll(0, System.Net.Sockets.SelectMode.SelectRead)
+                             && s.Available == 0);
+                } catch {
+                    return false;
+                }
+            }
+        }
 
         public int TimeoutMs {
             get => _timeoutMs;
