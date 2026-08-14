@@ -346,11 +346,12 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PreBuildEvent>if not exist "$(TargetDir)plugins" mkdir "$(TargetDir)plugins"
-    xcopy /Y /D "$(SolutionDir)Plugin.ModbusTcp\bin\$(ConfigurationName)\Plugin.ModbusTcp.dll" "$(TargetDir)plugins\"
-    xcopy /Y /D "$(SolutionDir)Plugin.Panasonic\bin\$(ConfigurationName)\Plugin.Panasonic.dll" "$(TargetDir)plugins\"
-    xcopy /Y /D "$(SolutionDir)Plugin.SiemensS7\bin\$(ConfigurationName)\Plugin.SiemensS7.dll" "$(TargetDir)plugins\"
-    </PreBuildEvent>
-  </PropertyGroup>
+    <PropertyGroup>
+      <PreBuildEvent>
+    if not exist "$(TargetDir)plugins" mkdir "$(TargetDir)plugins"
+    if exist "$(SolutionDir)Plugin.ModbusTcp\bin\$(ConfigurationName)\Plugin.ModbusTcp.dll" xcopy /Y /D "$(SolutionDir)Plugin.ModbusTcp\bin\$(ConfigurationName)\Plugin.ModbusTcp.dll" "$(TargetDir)plugins\"
+    if exist "$(SolutionDir)Plugin.Panasonic\bin\$(ConfigurationName)\Plugin.Panasonic.dll" xcopy /Y /D "$(SolutionDir)Plugin.Panasonic\bin\$(ConfigurationName)\Plugin.Panasonic.dll" "$(TargetDir)plugins\"
+    if exist "$(SolutionDir)Plugin.SiemensS7\bin\$(ConfigurationName)\Plugin.SiemensS7.dll" xcopy /Y /D "$(SolutionDir)Plugin.SiemensS7\bin\$(ConfigurationName)\Plugin.SiemensS7.dll" "$(TargetDir)plugins\"
+      </PreBuildEvent>
+    </PropertyGroup>
 </Project>
