@@ -32,15 +32,6 @@ namespace CommunicationDebuggingTools.Tests {
             Assert.IsTrue(a.IsBit);
         }
 
-        /// <summary>含 A-F 时按十六进制：R1A → 0x1A = 26。</summary>
-        [TestMethod]
-        public void Parse_R1A_Hex () {
-            var a = PanasonicSession.ParseAddress("R1A");
-            Assert.AreEqual(PanasonicArea.R, a.Area);
-            Assert.AreEqual(0x1A, a.Index);
-            Assert.IsTrue(a.IsBit);
-        }
-
         [TestMethod]
         public void Parse_DT100_ShouldBeWordArea () {
             var a = PanasonicSession.ParseAddress("DT100");
@@ -90,8 +81,10 @@ namespace CommunicationDebuggingTools.Tests {
         [TestMethod]
         public void Parse_R1A_ShouldBeWord1BitA () {
             var a = PanasonicSession.ParseAddress("R1A");
+            Assert.AreEqual(PanasonicArea.R, a.Area);
             Assert.AreEqual(1, a.Index);
             Assert.AreEqual(0xA, a.BitIndex);
+            Assert.IsTrue(a.IsBit);
             Assert.AreEqual("R001A", PanasonicSession.FormatContact(a));
         }
 

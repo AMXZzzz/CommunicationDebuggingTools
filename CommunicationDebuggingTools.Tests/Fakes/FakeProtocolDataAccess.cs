@@ -24,7 +24,19 @@ namespace CommunicationDebuggingTools.Tests.Fakes {
         public int WriteCallCount { get; private set; }
         public ProtocolDataMessage LastReadRequest { get; private set; }
         public ProtocolDataMessage LastWriteRequest { get; private set; }
+        /// <summary>模拟 Ping；默认与 IsConnected 一致，可单测时改写。</summary>
+        public bool PingResult { get; set; } = true;
 
+        public int PingCallCount { get; private set; }
+
+        public Task<bool> PingAsync (CancellationToken cancellationToken) {
+            PingCallCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            // 未连接则探针失败，贴近真实协议
+            if (!IsConnected)
+                return Task.FromResult(false);
+            return Task.FromResult(PingResult);
+        }
         public string GetProtocolName () => "Modbus TCP";
 
         public bool IsConnected { get; private set; }

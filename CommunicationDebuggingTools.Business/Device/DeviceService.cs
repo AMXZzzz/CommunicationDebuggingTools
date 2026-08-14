@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
 using CommunicationDebuggingTools.Business.Tools;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
@@ -17,14 +18,14 @@ namespace CommunicationDebuggingTools.Business.Device {
     public class DeviceService : IDeviceService {
         private readonly IProtocolResolver _resolver;
         private readonly IDeviceRepository _repository;
-        private readonly Dictionary<string, IProtocol> _sessions =
-            new Dictionary<string, IProtocol>();
-        private readonly Dictionary<string, CancellationTokenSource> _connectCts =
-            new Dictionary<string, CancellationTokenSource>();
+        private readonly ConcurrentDictionary<string, IProtocol> _sessions =
+    new ConcurrentDictionary<string, IProtocol>();
 
-        // 连续通讯失败计数；达到阈值时标为 Error（ALARM），成功时归零
-        private readonly Dictionary<string, int> _commErrors =
-            new Dictionary<string, int>();
+        private readonly ConcurrentDictionary<string, CancellationTokenSource> _connectCts =
+    new ConcurrentDictionary<string, CancellationTokenSource>();
+
+        private readonly ConcurrentDictionary<string, int> _commErrors =
+    new ConcurrentDictionary<string, int>();
         private const int COMM_ERROR_THRESHOLD = 3;
 
         // PingAsync 回调需要 Post 回 UI 线程
@@ -141,7 +142,7 @@ namespace CommunicationDebuggingTools.Business.Device {
             if (device.IsConnected)
                 return true;
 
-            CancelConnect(id);
+            CancelConnect(id); ReportCommError(id);
 
             var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _connectCts[id] = linkedCts;
@@ -202,10 +203,8 @@ namespace CommunicationDebuggingTools.Business.Device {
             CancelConnect(id);
 
             IProtocol protocol;
-            if (_sessions.TryGetValue(id, out protocol)) {
+            if (_sessions.TryRemove(id, out protocol))
                 SafeDisconnectProtocol(protocol);
-                _sessions.Remove(id);
-            }
 
             DeviceInfo device = Devices.FirstOrDefault(d => d.Id == id);
             if (device != null)
@@ -227,24 +226,24 @@ namespace CommunicationDebuggingTools.Business.Device {
         }
 
         /// <summary>
-        /// 通讯失败：累加连续失败计数。
-        /// 达到 <see cref="COMM_ERROR_THRESHOLD"/> 次后将设备标为 Error（ALARM）。
+        /// 累计通讯失败次数；达到 <see cref="COMM_ERROR_THRESHOLD"/> 次后将设备标为 Error（ALARM）。
         /// TCP 断线时直接调 <see cref="Disconnect"/>，无需走此方法。
         /// 在 UI 线程（VariableService 回调）中调用。
         /// </summary>
         public void ReportCommError (string deviceId) {
-            if (string.IsNullOrEmpty(deviceId)) return;
+            if (string.IsNullOrEmpty(deviceId))
+                return;
 
-            int count;
-            _commErrors.TryGetValue(deviceId, out count);
-            _commErrors[deviceId] = ++count;
-
-            if (count < COMM_ERROR_THRESHOLD) return;
+            int count = _commErrors.AddOrUpdate(deviceId, 1, (_, c) => c + 1);
+            if (count < COMM_ERROR_THRESHOLD)
+                return;
 
             DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
-            if (device != null && device.IsConnected
-                    && device.StatusType != DeviceStatusType.Error)
+            if (device != null
+                && device.IsConnected
+                && device.StatusType != DeviceStatusType.Error) {
                 device.StatusType = DeviceStatusType.Error;
+            }
         }
 
         /// <summary>
@@ -325,8 +324,17 @@ namespace CommunicationDebuggingTools.Business.Device {
                 ReportCommError(deviceId);    // 协议层失败 → 计数，达阈值 → ALARM
         }
 
-        /// <summary>断开全部设备及残留会话。</summary>
+        /// <summary>
+        /// 断开全部设备及残留会话，并取消进行中的心跳探测。
+        /// </summary>
         public void DisconnectAll () {
+            // 先停 Ping，避免后台仍访问已 Disconnect 的协议
+            CancellationTokenSource ping = Interlocked.Exchange(ref _pingCts, null);
+            if (ping != null) {
+                try { ping.Cancel(); } catch { }
+                try { ping.Dispose(); } catch { }
+            }
+
             foreach (string id in Devices.Select(d => d.Id).Where(x => !string.IsNullOrEmpty(x)).ToList())
                 Disconnect(id);
 
@@ -370,14 +378,14 @@ namespace CommunicationDebuggingTools.Business.Device {
                 return;
 
             try { cts.Cancel(); } catch { }
-            _connectCts.Remove(id);
+            _connectCts.TryRemove(id, out _);
             try { cts.Dispose(); } catch { }
         }
 
         private void CleanupConnectCts (string id, CancellationTokenSource linkedCts) {
             CancellationTokenSource existing;
             if (_connectCts.TryGetValue(id, out existing) && existing == linkedCts) {
-                _connectCts.Remove(id);
+                _connectCts.TryRemove(id, out _);
                 linkedCts.Dispose();
             }
         }
