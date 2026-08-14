@@ -64,5 +64,11 @@ namespace CommunicationDebuggingTools.Core.Interfaces {
         /// 一次性断开所有设备的通信连接（用于应用退出时清理资源）。
         /// </summary>
         void DisconnectAll ();
+
+        /// <summary>
+        /// 检查所有已连接会话是否仍然存活，将已断线的设备标为离线。
+        /// 必须在 UI 线程（如 DispatcherTimer 回调）中调用，避免跨线程更新绑定属性。
+        /// </summary>
+        void CheckConnections ();
     }
 }

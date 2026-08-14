@@ -22,11 +22,6 @@ namespace CommunicationDebuggingTools.Business.Device {
         private readonly Dictionary<string, CancellationTokenSource> _connectCts =
             new Dictionary<string, CancellationTokenSource>();
 
-        // 后台心跳：每 3 秒检查一次已连接会话是否真的还活着
-        private readonly Timer _heartbeat;
-        // 构造时捕获 UI 同步上下文，用于将状态变更 Post 回 UI 线程
-        private readonly SynchronizationContext _uiContext;
-
         public ObservableCollection<DeviceInfo> Devices { get; private set; }
 
         public DeviceService (IProtocolResolver resolver, IDeviceRepository repository) {
@@ -38,12 +33,6 @@ namespace CommunicationDebuggingTools.Business.Device {
             _resolver = resolver;
             _repository = repository;
             Devices = new ObservableCollection<DeviceInfo>();
-
-            // 捕获 UI 线程同步上下文（必须在 UI 线程上构造此服务）
-            _uiContext = SynchronizationContext.Current;
-            // 每 3 秒检测一次已连接会话，断线时自动标为离线
-            _heartbeat = new Timer(HeartbeatCallback, null,
-                TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
         }
 
 
@@ -190,7 +179,9 @@ namespace CommunicationDebuggingTools.Business.Device {
             }
         }
 
-        /// <summary>取消进行中的连接，并释放已建立的会话。</summary>
+        /// <summary>
+        /// 取消进行中的连接，并释放已建立的会话。
+        /// </summary>
         public void Disconnect (string id) {
             if (string.IsNullOrEmpty(id))
                 return;
@@ -209,33 +200,24 @@ namespace CommunicationDebuggingTools.Business.Device {
         }
 
         /// <summary>
-        /// 后台心跳回调（Timer 线程）。
-        /// 检查所有"已连接"会话的 IsConnected 属性；
-        /// 若协议报告已断线，则 Post 回 UI 线程调用 Disconnect 更新状态。
+        /// 检查所有已连接会话是否仍然存活，将已断线的设备标为离线。
+        /// 在 UI 线程（DispatcherTimer 回调）中调用，天然无跨线程问题。
         /// </summary>
-        private void HeartbeatCallback (object state) {
+        public void CheckConnections () {
             foreach (string id in _sessions.Keys.ToList()) {
                 IProtocol protocol;
                 if (!_sessions.TryGetValue(id, out protocol)) continue;
                 if (protocol.IsConnected) continue;
 
-                // 协议已断线，但 DeviceInfo 可能还显示 Connected
                 DeviceInfo device = Devices.FirstOrDefault(d => d.Id == id);
                 if (device == null || !device.IsConnected) continue;
 
-                string capturedId = id;
-                if (_uiContext != null)
-                    _uiContext.Post(_ => Disconnect(capturedId), null);
-                else
-                    Disconnect(capturedId);
+                Disconnect(id);   // 在 UI 线程上调用，直接安全
             }
         }
 
-        /// <summary>断开全部设备及残留会话，并停止心跳定时器。</summary>
+        /// <summary>断开全部设备及残留会话。</summary>
         public void DisconnectAll () {
-            // 先停止心跳，防止 Disconnect 执行期间并发回调
-            try { _heartbeat?.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
-
             foreach (string id in Devices.Select(d => d.Id).Where(x => !string.IsNullOrEmpty(x)).ToList())
                 Disconnect(id);
 
