@@ -1,9 +1,10 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CommunicationDebuggingTools.Core.Enums;
+﻿using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Core.Tools;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Plugin.ModbusTcp {
     /// <summary>
@@ -284,39 +285,11 @@ namespace Plugin.ModbusTcp {
         /// 从 ProtocolSettingsJson 解析 unitId；非法或缺失时返回 1。
         /// </summary>
         private static int ParseUnitId (string protocolSettingsJson) {
-            if (string.IsNullOrWhiteSpace(protocolSettingsJson))
-                return 1;
-
-            try {
-                int i = protocolSettingsJson.IndexOf("unitId", StringComparison.OrdinalIgnoreCase);
-                if (i < 0)
-                    return 1;
-
-                int colon = protocolSettingsJson.IndexOf(':', i);
-                if (colon < 0)
-                    return 1;
-
-                int start = colon + 1;
-                while (start < protocolSettingsJson.Length &&
-                       (protocolSettingsJson[start] == ' ' || protocolSettingsJson[start] == '\"'))
-                    start++;
-
-                int end = start;
-                while (end < protocolSettingsJson.Length && char.IsDigit(protocolSettingsJson[end]))
-                    end++;
-
-                int v;
-                if (int.TryParse(protocolSettingsJson.Substring(start, end - start), out v)) {
-                    if (v < 0) return 0;
-                    if (v > 255) return 255;
-                    return v;
-                }
-            } catch {
-            }
-
-            return 1;
+            int v = ProtocolSettingsJson.GetInt(protocolSettingsJson, "unitId", 1);
+            if (v < 0) return 0;
+            if (v > 255) return 255;
+            return v;
         }
-
 
         /// <summary>
         /// 探针：先做 Socket.Poll 检测 TCP 层，通了再 FC01 读线圈 0 验证 Modbus 通讯层。

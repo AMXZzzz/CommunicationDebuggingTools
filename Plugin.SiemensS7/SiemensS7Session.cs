@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Tools;
+using System;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Threading;
@@ -38,8 +39,8 @@ namespace Plugin.SiemensS7 {
         }
 
         public void ApplySettingsJson (string json) {
-            Rack = ReadIntField(json, "rack", 0);
-            Slot = ReadIntField(json, "slot", 1);
+            Rack = ProtocolSettingsJson.GetInt(json, "rack", 0);
+            Slot = ProtocolSettingsJson.GetInt(json, "slot", 1);
             if (Rack < 0) Rack = 0;
             if (Slot < 0) Slot = 0;
         }
@@ -280,25 +281,6 @@ namespace Plugin.SiemensS7 {
                 throw new ArgumentException("偏移无效: " + s);
             return v;
         }
-
-        static int ReadIntField (string json, string key, int def) {
-            if (string.IsNullOrWhiteSpace(json)) return def;
-            try {
-                int i = json.IndexOf(key, StringComparison.OrdinalIgnoreCase);
-                if (i < 0) return def;
-                int colon = json.IndexOf(':', i);
-                if (colon < 0) return def;
-                int start = colon + 1;
-                while (start < json.Length && (json[start] == ' ' || json[start] == '"')) start++;
-                int end = start;
-                if (end < json.Length && json[end] == '-') end++;
-                while (end < json.Length && char.IsDigit(json[end])) end++;
-                int v;
-                if (int.TryParse(json.Substring(start, end - start), out v)) return v;
-            } catch { }
-            return def;
-        }
-
         public void Dispose () {
             if (_disposed) return;
             _disposed = true;

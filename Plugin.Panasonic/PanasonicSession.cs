@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Tools;
+using System;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
@@ -49,7 +50,7 @@ namespace Plugin.Panasonic {
         }
 
         public void ApplySettingsJson (string json) {
-            Station = ReadIntField(json, "station", 1);
+            Station = ProtocolSettingsJson.GetInt(json, "station", 1);
             if (Station < 0) Station = 0;
             if (Station > 99) Station = 99;
         }
@@ -263,27 +264,6 @@ namespace Plugin.Panasonic {
                 Index = index,
                 IsBit = isBit
             };
-        }
-
-        private static int ReadIntField (string json, string key, int defaultValue) {
-            if (string.IsNullOrWhiteSpace(json))
-                return defaultValue;
-            try {
-                int i = json.IndexOf(key, StringComparison.OrdinalIgnoreCase);
-                if (i < 0) return defaultValue;
-                int colon = json.IndexOf(':', i);
-                if (colon < 0) return defaultValue;
-                int start = colon + 1;
-                while (start < json.Length && (json[start] == ' ' || json[start] == '\"'))
-                    start++;
-                int end = start;
-                while (end < json.Length && char.IsDigit(json[end]))
-                    end++;
-                int v;
-                if (int.TryParse(json.Substring(start, end - start), out v))
-                    return v;
-            } catch { }
-            return defaultValue;
         }
 
         public void Dispose () {
