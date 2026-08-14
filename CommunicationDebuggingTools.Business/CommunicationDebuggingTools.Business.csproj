@@ -44,6 +44,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="Device\DeviceService.cs" />
+    <Compile Include="Device\DeviceService.State.cs" />
     <Compile Include="Persistence\JsonDeviceRepository.cs" />
     <Compile Include="Persistence\JsonVariableRepository.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -57,6 +58,8 @@
       <Name>CommunicationDebuggingTools.Core</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Compile Include="Device\DeviceService.Connection.cs" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

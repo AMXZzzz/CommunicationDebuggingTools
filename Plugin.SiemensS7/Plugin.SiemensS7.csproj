@@ -53,4 +53,10 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>
+if not exist "$(SolutionDir)CommunicationDebuggingTools\bin\$(ConfigurationName)\plugins\" mkdir "$(SolutionDir)CommunicationDebuggingTools\bin\$(ConfigurationName)\plugins\"
+xcopy /Y /D "$(TargetPath)" "$(SolutionDir)CommunicationDebuggingTools\bin\$(ConfigurationName)\plugins\"
+    </PostBuildEvent>
+  </PropertyGroup>
 </Project>

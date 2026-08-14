@@ -1,4 +1,5 @@
 ﻿using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Services;
 using System;
@@ -8,10 +9,14 @@ using System.Windows.Threading;
 namespace CommunicationDebuggingTools {
     public partial class App : Application {
         private DispatcherTimer _heartbeat;
-
+        public static IAppLogger Logger { get; private set; }
         protected override void OnStartup (StartupEventArgs e) {
+
             base.OnStartup(e);
+
             MyAppServices.Initialize();
+            Logger = new MemoryAppLogger(500);
+            Logger.Info("App", "服务已初始化");
 
             // 每 3 秒在 UI 线程上检测各设备是否已断线
             // 使用 DispatcherTimer 而非 System.Threading.Timer：

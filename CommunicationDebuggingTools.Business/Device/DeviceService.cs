@@ -1,109 +1,89 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Collections.Concurrent;
-using CommunicationDebuggingTools.Business.Tools;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Business.Device {
-    /// <summary>
-    /// 设备业务服务：组合协议解析与持久化，对外提供 CRUD 与连接管理。
-    /// 连接使用 <see cref="ProtocolConnectionContext"/>，私有参数只在 ProtocolSettingsJson。
-    /// </summary>
-    public class DeviceService : IDeviceService {
+    public partial class DeviceService : IDeviceService {
         private readonly IProtocolResolver _resolver;
         private readonly IDeviceRepository _repository;
+        private readonly IAppLogger _log;
+
         private readonly ConcurrentDictionary<string, IProtocol> _sessions =
-    new ConcurrentDictionary<string, IProtocol>();
-
+            new ConcurrentDictionary<string, IProtocol>();
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _connectCts =
-    new ConcurrentDictionary<string, CancellationTokenSource>();
-
+            new ConcurrentDictionary<string, CancellationTokenSource>();
         private readonly ConcurrentDictionary<string, int> _commErrors =
-    new ConcurrentDictionary<string, int>();
+            new ConcurrentDictionary<string, int>();
+
         private const int COMM_ERROR_THRESHOLD = 3;
 
-        // PingAsync 回调需要 Post 回 UI 线程
-        private readonly System.Threading.SynchronizationContext _uiContext;
-
+        private readonly SynchronizationContext _uiContext;
         private int _pinging;
         private CancellationTokenSource _pingCts;
 
         public ObservableCollection<DeviceInfo> Devices { get; private set; }
 
-
-        public DeviceService (IProtocolResolver resolver, IDeviceRepository repository) {
-            if (resolver == null)
-                throw new ArgumentNullException("resolver");
-            if (repository == null)
-                throw new ArgumentNullException("repository");
+        public DeviceService (
+            IProtocolResolver resolver,
+            IDeviceRepository repository,
+            IAppLogger logger = null) {
+            if (resolver == null) throw new ArgumentNullException("resolver");
+            if (repository == null) throw new ArgumentNullException("repository");
 
             _resolver = resolver;
             _repository = repository;
+            _log = logger;
             Devices = new ObservableCollection<DeviceInfo>();
-            _uiContext = System.Threading.SynchronizationContext.Current;
+            _uiContext = SynchronizationContext.Current;
         }
 
-
-        /// <summary>仅测试：跳过探测，直接挂上已连接会话。</summary>
-        internal void AttachSessionForTest (string deviceId, IProtocol protocol) {
-            DeviceInfo d = FindRequired(deviceId);
-            _sessions[deviceId] = protocol;
-            d.IsConnected = true;
-            d.StatusType = DeviceStatusType.Success;
+        private void LogInfo (string msg) {
+            if (_log != null) _log.Info("Device", msg);
+        }
+        private void LogWarn (string msg) {
+            if (_log != null) _log.Warn("Device", msg);
+        }
+        private void LogError (string msg) {
+            if (_log != null) _log.Error("Device", msg);
         }
 
-        // -------------------- 持久化 --------------------
-
-        /// <summary>重新加载设备列表；先断开全部会话，状态一律离线。</summary>
         public void Load () {
-            try { _pingCts?.Cancel(); } catch { }
-
+            try { if (_pingCts != null) _pingCts.Cancel(); } catch { }
             DisconnectAll();
             Devices.Clear();
-
             IList<DeviceInfo> list = _repository.LoadAll();
-            if (list == null)
-                return;
-
+            if (list == null) return;
             foreach (DeviceInfo d in list) {
                 ResetRuntimeState(d);
                 Devices.Add(d);
             }
+            LogInfo("已加载设备 " + Devices.Count + " 台");
         }
 
-        /// <summary>保存当前设备集合。</summary>
         public void Save () {
             _repository.SaveAll(Devices.ToList());
         }
 
-        // -------------------- CRUD --------------------
-
-        /// <summary>新增设备并立即持久化。</summary>
         public void Add (DeviceInfo device) {
-            if (device == null)
-                throw new ArgumentNullException("device");
+            if (device == null) throw new ArgumentNullException("device");
             if (string.IsNullOrEmpty(device.Id))
                 device.Id = Guid.NewGuid().ToString("N");
             if (Devices.Any(d => d.Id == device.Id))
                 throw new InvalidOperationException("设备 Id 已存在: " + device.Id);
-
             Devices.Add(device);
             Save();
+            LogInfo("新增设备: " + device.Name);
         }
 
-        /// <summary>
-        /// 更新同一实例上的字段并持久化。
-        /// 连接相关参数变化且仍在连接时，先断开再写回。
-        /// </summary>
         public void Update (DeviceInfo device) {
-            if (device == null)
-                throw new ArgumentNullException("device");
+            if (device == null) throw new ArgumentNullException("device");
             if (string.IsNullOrEmpty(device.Id))
                 throw new ArgumentException("Id 不能为空");
 
@@ -116,346 +96,21 @@ namespace CommunicationDebuggingTools.Business.Device {
 
             CopyDeviceFields(device, old);
             Save();
+            LogInfo("更新设备: " + old.Name);
         }
 
-        /// <summary>断开、移除并持久化；不存在则忽略。</summary>
         public void Remove (string id) {
             if (string.IsNullOrEmpty(id))
                 throw new ArgumentException("Id 不能为空");
 
             DeviceInfo d = Devices.FirstOrDefault(x => x.Id == id);
-            if (d == null)
-                return;
+            if (d == null) return;
 
+            string name = d.Name;
             Disconnect(id);
             Devices.Remove(d);
             Save();
-        }
-
-        // -------------------- 连接 --------------------
-
-        /// <summary>
-        /// 异步连接：探测 → 解析插件 → ProtocolConnectionContext → 建会话。
-        /// </summary>
-        public async Task<bool> ConnectAsync (string id, CancellationToken cancellationToken) {
-            DeviceInfo device = FindRequired(id);
-            if (device.IsConnected)
-                return true;
-
-            CancelConnect(id); ReportCommError(id);
-
-            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            _connectCts[id] = linkedCts;
-            CancellationToken ct = linkedCts.Token;
-
-            MarkConnecting(device);
-
-            IProtocol protocol = null;
-            try {
-                if (!await ProbeReachableAsync(device, ct)) {
-                    MarkOffline(device);
-                    return false;
-                }
-
-                ct.ThrowIfCancellationRequested();
-
-                protocol = _resolver.Resolve(device.Protocol);
-                if (protocol == null) {
-                    MarkError(device);
-                    return false;
-                }
-
-                bool ok = await protocol.ConnectAsync(BuildConnectionContext(device), ct);
-
-                if (ct.IsCancellationRequested) {
-                    SafeDisconnectProtocol(protocol);
-                    MarkOffline(device);
-                    return false;
-                }
-
-                if (ok) {
-                    _sessions[id] = protocol;
-                    MarkConnected(device);
-                } else {
-                    SafeDisconnectProtocol(protocol);
-                    MarkError(device);
-                }
-
-                return ok;
-            } catch (OperationCanceledException) {
-                SafeDisconnectProtocol(protocol);
-                MarkOffline(device);
-                return false;
-            } catch {
-                SafeDisconnectProtocol(protocol);
-                MarkError(device);
-                return false;
-            } finally {
-                CleanupConnectCts(id, linkedCts);
-            }
-        }
-
-        /// <summary>取消进行中的连接，并释放已建立的会话。</summary>
-        public void Disconnect (string id) {
-            if (string.IsNullOrEmpty(id))
-                return;
-
-            CancelConnect(id);
-
-            IProtocol protocol;
-            if (_sessions.TryRemove(id, out protocol))
-                SafeDisconnectProtocol(protocol);
-
-            DeviceInfo device = Devices.FirstOrDefault(d => d.Id == id);
-            if (device != null)
-                MarkOffline(device);
-        }
-
-        /// <summary>
-        /// 通讯成功：清零连续失败计数，若设备处于 Error 状态则恢复为 Success。
-        /// 在 UI 线程（VariableService 回调）中调用。
-        /// </summary>
-        public void ReportCommSuccess (string deviceId) {
-            if (string.IsNullOrEmpty(deviceId)) return;
-            _commErrors[deviceId] = 0;
-
-            DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
-            if (device != null && device.IsConnected
-                    && device.StatusType == DeviceStatusType.Error)
-                device.StatusType = DeviceStatusType.Success;
-        }
-
-        /// <summary>
-        /// 累计通讯失败次数；达到 <see cref="COMM_ERROR_THRESHOLD"/> 次后将设备标为 Error（ALARM）。
-        /// TCP 断线时直接调 <see cref="Disconnect"/>，无需走此方法。
-        /// 在 UI 线程（VariableService 回调）中调用。
-        /// </summary>
-        public void ReportCommError (string deviceId) {
-            if (string.IsNullOrEmpty(deviceId))
-                return;
-
-            int count = _commErrors.AddOrUpdate(deviceId, 1, (_, c) => c + 1);
-            if (count < COMM_ERROR_THRESHOLD)
-                return;
-
-            DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
-            if (device != null
-                && device.IsConnected
-                && device.StatusType != DeviceStatusType.Error) {
-                device.StatusType = DeviceStatusType.Error;
-            }
-        }
-
-        /// <summary>
-        /// 检查所有已连接会话（DispatcherTimer 每 3 秒在 UI 线程上调用）。
-        /// 直接调 PingAsync —— 各协议内部已合并了 TCP 层（Socket.Poll）
-        /// 和协议层（实际读请求）两层检测，此处无需重复判断。
-        /// </summary>
-        public void CheckConnections () {
-            // 上一轮未完成则跳过，避免 Task 堆积
-            if (Interlocked.CompareExchange(ref _pinging, 1, 0) != 0)
-                return;
-
-            CancellationTokenSource cts = _pingCts;
-            if (cts != null) {
-                try { cts.Cancel(); } catch { }
-                try { cts.Dispose(); } catch { }
-            }
-            _pingCts = new CancellationTokenSource();
-            CancellationToken token = _pingCts.Token;
-
-            List<string> ids = _sessions.Keys.ToList();
-            if (ids.Count == 0) {
-                Interlocked.Exchange(ref _pinging, 0);
-                return;
-            }
-
-            Task.Run(async () => {
-                try {
-                    foreach (string id in ids) {
-                        if (token.IsCancellationRequested)
-                            break;
-
-                        IProtocol protocol;
-                        if (!_sessions.TryGetValue(id, out protocol) || protocol == null)
-                            continue;
-
-                        bool ok = false;
-                        try {
-                            ok = await protocol.PingAsync(token).ConfigureAwait(false);
-                        } catch (OperationCanceledException) {
-                            break;
-                        } catch {
-                            ok = false;
-                        }
-
-                        string capturedId = id;
-                        IProtocol capturedProto = protocol;
-                        bool capturedOk = ok;
-
-                        void handle () => OnPingResult(capturedId, capturedProto, capturedOk);
-
-                        if (_uiContext != null)
-                            _uiContext.Post(_ => handle(), null);
-                        else
-                            handle();
-                    }
-                } finally {
-                    Interlocked.Exchange(ref _pinging, 0);
-                }
-            }, token);
-        }
-
-        /// <summary>
-        /// PingAsync 回调，在 UI 线程执行。
-        /// ok=true  → 通讯正常，清零错误计数，恢复 RUN。
-        /// ok=false → 再次查 IsConnected 区分「TCP 断线」和「通讯异常」：
-        ///            断线 → Disconnect（OFFLINE）；通讯异常 → ReportCommError（累计到 ALARM）。
-        /// </summary>
-        private void OnPingResult (string deviceId, IProtocol protocol, bool ok) {
-            if (ok) {
-                ReportCommSuccess(deviceId);
-                return;
-            }
-            // PingAsync 返回 false：TCP 断线 or 协议层失败
-            if (!protocol.IsConnected)
-                Disconnect(deviceId);         // TCP 断线 → OFFLINE
-            else
-                ReportCommError(deviceId);    // 协议层失败 → 计数，达阈值 → ALARM
-        }
-
-        /// <summary>
-        /// 断开全部设备及残留会话，并取消进行中的心跳探测。
-        /// </summary>
-        public void DisconnectAll () {
-            // 先停 Ping，避免后台仍访问已 Disconnect 的协议
-            CancellationTokenSource ping = Interlocked.Exchange(ref _pingCts, null);
-            if (ping != null) {
-                try { ping.Cancel(); } catch { }
-                try { ping.Dispose(); } catch { }
-            }
-
-            foreach (string id in Devices.Select(d => d.Id).Where(x => !string.IsNullOrEmpty(x)).ToList())
-                Disconnect(id);
-
-            foreach (string id in _sessions.Keys.ToList())
-                Disconnect(id);
-
-            foreach (string id in _connectCts.Keys.ToList())
-                CancelConnect(id);
-        }
-
-        /// <summary>获取已连接的协议会话；未连接返回 null。</summary>
-        public IProtocol GetProtocol (string deviceId) {
-            if (string.IsNullOrEmpty(deviceId))
-                return null;
-
-            IProtocol p;
-            return _sessions.TryGetValue(deviceId, out p) ? p : null;
-        }
-
-        // -------------------- 私有：连接辅助 --------------------
-
-        private static ProtocolConnectionContext BuildConnectionContext (DeviceInfo device) {
-            return new ProtocolConnectionContext {
-                Ip = device.Ip,
-                Port = device.Port,
-                ProtocolSettingsJson = device.ProtocolSettingsJson,
-                ByteOrder = device.ByteOrder,
-                WordOrder = device.WordOrder,
-                StringEncoding = device.StringEncoding,
-                TimeoutMs = 3000
-            };
-        }
-
-        private static async Task<bool> ProbeReachableAsync (DeviceInfo device, CancellationToken ct) {
-            return await TcpProbe.IsPortOpenAsync(device.Ip, device.Port, 1000, ct);
-        }
-
-        private void CancelConnect (string id) {
-            CancellationTokenSource cts;
-            if (!_connectCts.TryGetValue(id, out cts))
-                return;
-
-            try { cts.Cancel(); } catch { }
-            _connectCts.TryRemove(id, out _);
-            try { cts.Dispose(); } catch { }
-        }
-
-        private void CleanupConnectCts (string id, CancellationTokenSource linkedCts) {
-            CancellationTokenSource existing;
-            if (_connectCts.TryGetValue(id, out existing) && existing == linkedCts) {
-                _connectCts.TryRemove(id, out _);
-                linkedCts.Dispose();
-            }
-        }
-
-        // -------------------- 私有：状态 / 字段 --------------------
-
-        private static void ResetRuntimeState (DeviceInfo d) {
-            d.IsConnected = false;
-            if (d.StatusType == DeviceStatusType.Success ||
-                d.StatusType == DeviceStatusType.Connecting) {
-                d.StatusType = DeviceStatusType.Offline;
-            }
-        }
-
-        private static void MarkConnecting (DeviceInfo d) {
-            d.StatusType = DeviceStatusType.Connecting;
-            d.IsConnected = false;
-        }
-
-        private static void MarkConnected (DeviceInfo d) {
-            d.IsConnected = true;
-            d.StatusType = DeviceStatusType.Success;
-        }
-
-        private static void MarkOffline (DeviceInfo d) {
-            d.IsConnected = false;
-            d.StatusType = DeviceStatusType.Offline;
-        }
-
-        private static void MarkError (DeviceInfo d) {
-            d.IsConnected = false;
-            d.StatusType = DeviceStatusType.Error;
-        }
-
-        /// <summary>连接相关配置是否变化（含 ProtocolSettingsJson）。</summary>
-        private static bool IsConnectionConfigChanged (DeviceInfo old, DeviceInfo device) {
-            return old.Ip != device.Ip
-                || old.Port != device.Port
-                || old.Protocol != device.Protocol
-                || old.ProtocolSettingsJson != device.ProtocolSettingsJson;
-        }
-
-        /// <summary>将 source 的可编辑字段写到 target（同一实例刷新绑定）。</summary>
-        private static void CopyDeviceFields (DeviceInfo source, DeviceInfo target) {
-            target.Name = source.Name;
-            target.Model = source.Model;
-            target.Protocol = source.Protocol;
-            target.Ip = source.Ip;
-            target.Port = source.Port;
-            target.Lane = source.Lane;
-            target.ByteOrder = source.ByteOrder;
-            target.WordOrder = source.WordOrder;
-            target.StringEncoding = source.StringEncoding;
-            target.ProtocolSettingsJson = source.ProtocolSettingsJson;
-        }
-
-        private DeviceInfo FindRequired (string id) {
-            if (string.IsNullOrEmpty(id))
-                throw new ArgumentException("Id 不能为空");
-
-            DeviceInfo d = Devices.FirstOrDefault(x => x.Id == id);
-            if (d == null)
-                throw new InvalidOperationException("设备不存在: " + id);
-            return d;
-        }
-
-        private static void SafeDisconnectProtocol (IProtocol protocol) {
-            if (protocol == null)
-                return;
-            try { protocol.Disconnect(); } catch { }
+            LogInfo("删除设备: " + name);
         }
     }
 }

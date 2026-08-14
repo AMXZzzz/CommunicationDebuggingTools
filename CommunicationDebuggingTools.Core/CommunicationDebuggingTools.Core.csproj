@@ -57,6 +57,10 @@
     <Compile Include="Interfaces\IProtocolResolver.cs" />
     <Compile Include="Interfaces\IVariableRepository.cs" />
     <Compile Include="Interfaces\IVariableService.cs" />
+    <Compile Include="Logging\IAppLogger.cs" />
+    <Compile Include="Logging\LogEntry.cs" />
+    <Compile Include="Logging\LogLevel.cs" />
+    <Compile Include="Logging\MemoryAppLoggerClass1.cs" />
     <Compile Include="Models\ConnectionFieldSpec.cs" />
     <Compile Include="Models\DeviceInfo.cs" />
     <Compile Include="Models\ProtocolConnectionContext.cs" />

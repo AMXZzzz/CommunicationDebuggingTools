@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Business.Variable {
@@ -15,16 +16,29 @@ namespace CommunicationDebuggingTools.Business.Variable {
     public class VariableService : IVariableService {
         private readonly IDeviceService _devices;
         private readonly IVariableRepository _repository;
+        private readonly IAppLogger _log;
 
         public ObservableCollection<VariableItem> Variables { get; private set; }
 
-        public VariableService (IDeviceService devices, IVariableRepository repository) {
+        public VariableService (
+            IDeviceService devices,
+            IVariableRepository repository,
+            IAppLogger logger = null) {
             if (devices == null) throw new ArgumentNullException(nameof(devices));
             if (repository == null) throw new ArgumentNullException(nameof(repository));
 
             _devices = devices;
             _repository = repository;
+            _log = logger;
             Variables = new ObservableCollection<VariableItem>();
+        }
+
+        private void LogWarn (string msg) {
+            if (_log != null) _log.Warn("Variable", msg);
+        }
+
+        private void LogError (string msg) {
+            if (_log != null) _log.Error("Variable", msg);
         }
 
         public void Load () {
@@ -40,22 +54,18 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
         public void Add (VariableItem item) {
             if (item == null) throw new ArgumentNullException(nameof(item));
-
             Normalize(item);
             ValidateForUpsert(item, null);
-
             if (string.IsNullOrWhiteSpace(item.Id))
                 item.Id = Guid.NewGuid().ToString("N");
             if (Variables.Any(x => x != null && x.Id == item.Id))
                 throw new InvalidOperationException("变量 Id 已存在: " + item.Id);
-
             Variables.Add(item);
             Save();
         }
 
         public void Update (VariableItem item) {
             if (item == null) throw new ArgumentNullException(nameof(item));
-
             Normalize(item);
             VariableItem old = FindRequired(item.Id);
             ValidateForUpsert(item, item.Id);
@@ -86,14 +96,17 @@ namespace CommunicationDebuggingTools.Business.Variable {
             if (v.Access == VariableAccess.WriteOnly) {
                 v.LastError = "只写变量不可读";
                 v.Quality = DataQuality.Bad;
+                LogWarn("只写不可读: " + v.Name);
                 return false;
             }
 
             IProtocolDataAccess access;
             DeviceInfo device;
-            if (!TryGetDataAccess(v.DeviceId, out access, out device, out string err)) {
+            string err;
+            if (!TryGetDataAccess(v.DeviceId, out access, out device, out err)) {
                 v.LastError = err;
                 v.Quality = DataQuality.Bad;
+                LogWarn(err + " — " + v.Name);
                 return false;
             }
 
@@ -101,30 +114,24 @@ namespace CommunicationDebuggingTools.Business.Variable {
             ProtocolDataMessage result;
             try {
                 result = await access.ReadAsync(msg, cancellationToken);
-            } catch (InvalidOperationException ex) {
-                v.LastError = ex.Message;
-                v.Quality = DataQuality.Bad;
-                CheckAndMarkDisconnected(v.DeviceId);
-                return false;
-            } catch (TimeoutException ex) {
-                v.LastError = ex.Message;
-                v.Quality = DataQuality.Bad;
-                CheckAndMarkDisconnected(v.DeviceId);
-                return false;
             } catch (Exception ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
+                LogError("读异常: " + v.Name + " @ " + v.Address + " — " + ex.Message);
                 CheckAndMarkDisconnected(v.DeviceId);
                 return false;
             }
 
             v.LastError = result.ErrorMessage ?? "";
             v.Quality = result.Quality;
+
             if (result.Success) {
                 v.LastValue = result.Value;
                 return true;
             }
-            // 协议层返回失败时也检测一次
+
+            LogError("读失败: " + v.Name + " @ " + v.Address
+                + " — " + (result.ErrorMessage ?? ""));
             CheckAndMarkDisconnected(v.DeviceId);
             return false;
         }
@@ -137,14 +144,17 @@ namespace CommunicationDebuggingTools.Business.Variable {
             if (v.Access == VariableAccess.ReadOnly) {
                 v.LastError = "只读变量不可写";
                 v.Quality = DataQuality.Bad;
+                LogWarn("只读不可写: " + v.Name);
                 return false;
             }
 
             IProtocolDataAccess access;
             DeviceInfo device;
-            if (!TryGetDataAccess(v.DeviceId, out access, out device, out string err)) {
+            string err;
+            if (!TryGetDataAccess(v.DeviceId, out access, out device, out err)) {
                 v.LastError = err;
                 v.Quality = DataQuality.Bad;
+                LogWarn(err + " — " + v.Name);
                 return false;
             }
 
@@ -152,30 +162,24 @@ namespace CommunicationDebuggingTools.Business.Variable {
             ProtocolDataMessage result;
             try {
                 result = await access.WriteAsync(msg, cancellationToken);
-            } catch (InvalidOperationException ex) {
-                v.LastError = ex.Message;
-                v.Quality = DataQuality.Bad;
-                CheckAndMarkDisconnected(v.DeviceId);
-                return false;
-            } catch (TimeoutException ex) {
-                v.LastError = ex.Message;
-                v.Quality = DataQuality.Bad;
-                CheckAndMarkDisconnected(v.DeviceId);
-                return false;
             } catch (Exception ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
+                LogError("写异常: " + v.Name + " @ " + v.Address + " — " + ex.Message);
                 CheckAndMarkDisconnected(v.DeviceId);
                 return false;
             }
 
             v.LastError = result.ErrorMessage ?? "";
+
             if (result.Success) {
                 v.LastValue = value;
                 v.Quality = DataQuality.Good;
                 return true;
             }
 
+            LogError("写失败: " + v.Name + " @ " + v.Address
+                + " — " + (result.ErrorMessage ?? ""));
             CheckAndMarkDisconnected(v.DeviceId);
             v.Quality = DataQuality.Bad;
             return false;
@@ -207,6 +211,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 error = "设备不存在";
                 return false;
             }
+
             if (!device.IsConnected) {
                 error = "设备未连接";
                 return false;
@@ -218,10 +223,10 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 error = "协议不支持数据读写";
                 return false;
             }
+
             return true;
         }
 
-        /// <summary>组共性报文；序与编码取设备默认。</summary>
         private static ProtocolDataMessage BuildMessage (
             VariableItem v, DeviceInfo device, object writeValue) {
             return new ProtocolDataMessage {
@@ -238,10 +243,8 @@ namespace CommunicationDebuggingTools.Business.Variable {
         private void ValidateForUpsert (VariableItem item, string currentId) {
             if (string.IsNullOrWhiteSpace(item.DeviceId))
                 throw new ArgumentException("设备 Id 不能为空", nameof(item));
-
             if (string.IsNullOrWhiteSpace(item.Name))
                 throw new ArgumentException("变量名称不能为空", nameof(item));
-
             if (string.IsNullOrWhiteSpace(item.Address))
                 throw new ArgumentException("变量地址不能为空", nameof(item));
 
@@ -273,17 +276,12 @@ namespace CommunicationDebuggingTools.Business.Variable {
         private VariableItem FindRequired (string id) {
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException("Id 不能为空", nameof(id));
-
             VariableItem v = Variables.FirstOrDefault(x => x != null && x.Id == id);
             if (v == null)
                 throw new InvalidOperationException("变量不存在: " + id);
             return v;
         }
 
-        /// <summary>
-        /// 读写失败后检查协议是否已断线。
-        /// 若 protocol.IsConnected == false，则通知 DeviceService 将设备标为离线。
-        /// </summary>
         private void CheckAndMarkDisconnected (string deviceId) {
             try {
                 IProtocol protocol = _devices.GetProtocol(deviceId);

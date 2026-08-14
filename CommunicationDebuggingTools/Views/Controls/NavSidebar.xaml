@@ -83,7 +83,7 @@
                              GroupName="Nav"
                              Style="{StaticResource SF.Style.NavRadioButtonStyle}"
                              Checked="Nav_Checked"/>
-                <RadioButton Content="通讯日志"
+                <RadioButton Content="日志记录"
                              Tag="{x:Type log:LogPage}"
                              GroupName="Nav"
                              Style="{StaticResource SF.Style.NavRadioButtonStyle}"
