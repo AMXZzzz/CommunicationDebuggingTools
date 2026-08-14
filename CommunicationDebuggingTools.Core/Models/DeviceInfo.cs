@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace CommunicationDebuggingTools.Core.Models {
     /// <summary>
-    /// 设备信息模型（UI / 业务 / 持久化共用）。
+    /// 设备/PLC信息模型（UI / 业务 / 持久化共用）。
     /// 协议私有连接参数仅存放在 <see cref="ProtocolSettingsJson"/>，由对应插件解析；
     /// 默认字节序、字序、字符串编码为设备级，变量一期直接继承。
     /// </summary>

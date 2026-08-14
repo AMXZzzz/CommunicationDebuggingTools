@@ -90,7 +90,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
             // 站号仅存在于 ProtocolSettingsJson
             if (txtUnitId != null)
-                txtUnitId.Text = ProtocolSettingsJson.GetInt(info.ProtocolSettingsJson, "unitId", 1).ToString();
+                txtUni  tId.Text = ProtocolSettingsJson.GetInt(info.ProtocolSettingsJson, "unitId", 1).ToString();
 
             if (txtStatus != null) {
                 txtStatus.Text = info.StatusText ?? "离线";
@@ -138,11 +138,13 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         /// </summary>
         private string BuildUnitIdSettingsJson () {
             int unit = 1;
-            if (txtUnitId != null)
+            if (txtUnitId != null) {
                 int.TryParse(txtUnitId.Text.Trim(), out unit);
-            if (unit < 0) unit = 0;
-            if (unit > 255) unit = 255;
-            return "{\"unitId\":" + unit + "}";
+                if (unit < 0) unit = 0;
+                if (unit > 99) unit = 99;
+            }
+            // unitId：Modbus；station：松下（同一输入框）
+            return "{\"unitId\":" + unit + ",\"station\":" + unit + "}";
         }
 
         /// <summary>

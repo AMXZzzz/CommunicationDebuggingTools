@@ -414,17 +414,24 @@ namespace Plugin.Panasonic {
         /// 探针：先做 Socket.Poll 快速判断 TCP 层，通了再发 RCS R0000 验证协议层。
         /// 返回 false 可能是 TCP 断线也可能是通讯异常，调用方通过 IsConnected 区分。
         /// </summary>
-        public Task<bool> PingAsync (System.Threading.CancellationToken cancellationToken) {
-            // ① TCP 层：Socket.Poll，零 I/O，毫秒级
-            if (!IsConnected) return Task.FromResult(false);
-            // ② 协议层：读 R0000（安全地址，无副作用）
+        public Task<bool> PingAsync (CancellationToken cancellationToken) {
+            if (!IsConnected)
+                return Task.FromResult(false);
+
             try {
-                string resp = _session.Transact("RCSR0000");
+                cancellationToken.ThrowIfCancellationRequested();
+                // R0 → R00000，再 RCS
+                var addr = PanasonicSession.ParseAddress("R0");
+                string contact = PanasonicSession.FormatContact(addr);
+                string resp = _session.Transact("RCS" + contact);
                 return Task.FromResult(resp != null && resp.IndexOf('$') >= 0);
             } catch {
-                return Task.FromResult(false);
+                return Task.FromResult(false); // 不主动 Disconnect，交给 DeviceService
             }
         }
+
+
+
         public void Dispose () {
             if (_disposed) return;
             _disposed = true;

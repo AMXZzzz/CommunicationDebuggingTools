@@ -44,6 +44,8 @@ namespace Plugin.Panasonic {
             }
         }
 
+
+
         public int TimeoutMs {
             get => _timeoutMs;
             set => _timeoutMs = value < 500 ? 500 : value;
