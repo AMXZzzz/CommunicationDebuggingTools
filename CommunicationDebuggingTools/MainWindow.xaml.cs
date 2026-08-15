@@ -1,8 +1,9 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools {
 
@@ -32,10 +33,17 @@ namespace CommunicationDebuggingTools {
         private void NavigateTo (Type pageType) {
             if (MainFrame == null || pageType == null) return;
             if (!typeof(Page).IsAssignableFrom(pageType)) return;
-
-            Page page = _services.GetRequiredService(pageType) as Page;
-            if (page != null)
-                MainFrame.Navigate(page);
+            try {
+                Page page = _services.GetRequiredService(pageType) as Page;
+                if (page != null)
+                    MainFrame.Navigate(page);
+            } catch (Exception ex) {
+                try {
+                    (_services.GetService(typeof(IAppLogger)) as IAppLogger)
+                        ?.Error("Nav", "打开页面失败: " + pageType.Name, ex);
+                } catch { }
+                MessageBox.Show("打开页面失败:\n" + ex.Message, "导航错误");
+            }
         }
 
         // ── 无边框窗口控件 ────────────────────────────

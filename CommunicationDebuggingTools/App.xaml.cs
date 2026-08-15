@@ -12,8 +12,8 @@ using CommunicationDebuggingTools.ViewModels;
 using CommunicationDebuggingTools.Views.Pages.Device;
 using CommunicationDebuggingTools.Views.Pages.Log;
 using CommunicationDebuggingTools.Views.Pages.Monitor;
-using CommunicationDebuggingTools.Views.VariableConfigPage;
 using CommunicationDebuggingTools.Views.Pages.Settings;
+using CommunicationDebuggingTools.Views.VariableConfigPage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools {
@@ -21,52 +21,114 @@ namespace CommunicationDebuggingTools {
     /// <summary>
     /// 应用组合根（Composition Root）。
     /// 唯一知晓所有具体类型的地方；其他层只见接口。
-    /// 不再有 MyAppServices——所有服务通过构造注入或 ServiceProvider 显式解析。
     /// </summary>
     public partial class App : Application {
 
+        /// <summary>根容器；退出 Dispose 后置 null，禁止再解析。</summary>
         public static IServiceProvider Services { get; private set; }
 
         private DispatcherTimer _heartbeat;
+        private IDeviceService _deviceService;
+        private IPollingEngine _pollingEngine;
+        private IAppLogger _log;
 
         // ── 启动 ─────────────────────────────────────
         protected override void OnStartup (StartupEventArgs e) {
             base.OnStartup(e);
 
+            // 全局 UI 异常：记日志并阻止进程被直接干掉（便于继续排查）
+            DispatcherUnhandledException += App_DispatcherUnhandledException;
+
             // ① 注册
             Services = BuildServiceProvider();
 
-            IAppLogger log = Services.GetRequiredService<IAppLogger>();
-            log.Info("App", "服务容器就绪");
+            _log = Services.GetRequiredService<IAppLogger>();
+            _log.Info("App", "服务容器就绪");
 
-            // ② 初始化（Load 分离于构造）
-            Services.GetRequiredService<IDeviceService>().Load();
+            // ② 初始化（Load 与构造分离）；缓存单例，退出/心跳不再走已释放的 Services
+            _deviceService = Services.GetRequiredService<IDeviceService>();
+            _deviceService.Load();
             Services.GetRequiredService<IVariableService>().Load();
 
-            // ③ 轮询引擎在 UI 线程启动（捕获 SynchronizationContext）
-            Services.GetRequiredService<IPollingEngine>().Start();
+            // ③ 轮询引擎须在 UI 线程 Start（内部捕获 SynchronizationContext）
+            _pollingEngine = Services.GetRequiredService<IPollingEngine>();
+            _pollingEngine.Start();
 
-            // ④ 心跳
+            // ④ 心跳：只使用缓存引用，避免退出阶段访问已 Dispose 的 IServiceProvider
             _heartbeat = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-            _heartbeat.Tick += (_, __) =>
-                Services.GetRequiredService<IDeviceService>().CheckConnections();
+            _heartbeat.Tick += Heartbeat_Tick;
             _heartbeat.Start();
 
-            // ⑤ 主窗口（由 DI 创建，MainWindow 构造注入 IServiceProvider）
+            // ⑤ 主窗口
             var mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
 
-            log.Info("App", "应用已启动");
+            _log.Info("App", "应用已启动");
+        }
+
+        private void App_DispatcherUnhandledException (
+            object sender,
+            DispatcherUnhandledExceptionEventArgs args) {
+            try {
+                _log?.Error("App", "UI 未处理异常", args.Exception);
+            } catch { }
+
+            try {
+                MessageBox.Show(
+                    args.Exception?.Message ?? "未知错误",
+                    "程序异常",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            } catch { }
+
+            args.Handled = true;
+        }
+
+        /// <summary>
+        /// 心跳回调。Stop 之后仍可能有一次已排队的 Tick，必须容忍 ObjectDisposedException。
+        /// </summary>
+        private void Heartbeat_Tick (object sender, EventArgs e) {
+            try {
+                _deviceService?.CheckConnections();
+            } catch (ObjectDisposedException) {
+                // 退出过程中偶发
+            } catch (Exception ex) {
+                try { _log?.Error("App", "心跳异常", ex); } catch { }
+            }
         }
 
         // ── 退出 ─────────────────────────────────────
+        /// <summary>
+        /// 顺序必须为：停心跳并摘回调 → 停轮询/断开 → 写日志 → Dispose 容器。
+        /// 禁止在 Dispose 之后再 Services.GetService。
+        /// </summary>
         protected override void OnExit (ExitEventArgs e) {
-            try { Services?.GetService<IPollingEngine>()?.Stop(); } catch { }
-            try { _heartbeat?.Stop(); } catch { }
-            try { Services?.GetService<IDeviceService>()?.DisconnectAll(); } catch { }
-            try { (Services as IDisposable)?.Dispose(); } catch { }
+            // ① 先停心跳，移除回调，防止 Dispose 后仍触发 Tick
+            if (_heartbeat != null) {
+                try {
+                    _heartbeat.Stop();
+                    _heartbeat.Tick -= Heartbeat_Tick;
+                } catch { }
+                _heartbeat = null;
+            }
 
-            Services?.GetService<IAppLogger>()?.Info("App", "应用已退出");
+            // ② 停业务（使用启动时缓存的引用）
+            try { _pollingEngine?.Stop(); } catch { }
+            try { _deviceService?.DisconnectAll(); } catch { }
+
+            // ③ 日志必须在容器 Dispose 之前
+            try { _log?.Info("App", "应用已退出"); } catch { }
+
+            // ④ 释放根容器
+            try {
+                (Services as IDisposable)?.Dispose();
+            } catch { }
+
+            Services = null;
+            _deviceService = null;
+            _pollingEngine = null;
+            _log = null;
+
             base.OnExit(e);
         }
 
@@ -80,8 +142,8 @@ namespace CommunicationDebuggingTools {
 
             // ── 协议解析器 ──
             sc.AddSingleton<IProtocolResolver>(sp => {
-                string dir    = Path.Combine(baseDir, "plugins");
-                var resolver  = new ProtocolResolver();
+                string dir = Path.Combine(baseDir, "plugins");
+                var resolver = new ProtocolResolver();
                 resolver.LoadFromFolder(dir);
                 int n = resolver.GetProtocolNames()?.Count ?? 0;
                 sp.GetRequiredService<IAppLogger>()
@@ -102,19 +164,19 @@ namespace CommunicationDebuggingTools {
             sc.AddSingleton<IVariableService, VariableService>();
             sc.AddSingleton<IPollingEngine, PollingEngine>();
 
-            // ── ViewModels（Transient：每次导航创建新实例）──
+            // ── ViewModels（Transient）──
             sc.AddTransient<DevicePageViewModel>();
             sc.AddTransient<VariablePageViewModel>();
             sc.AddTransient<LogPageViewModel>();
 
-            // ── Pages（Transient：依赖 Transient ViewModel）──
+            // ── Pages（Transient）──
             sc.AddTransient<DevicePage>();
             sc.AddTransient<VariableConfigPage>();
             sc.AddTransient<LogPage>();
             sc.AddTransient<DataMonitorPage>();
-            sc.AddTransient<SettingsPage>(); 
+            sc.AddTransient<SettingsPage>();
 
-            // ── 主窗口（Singleton：只有一个）──
+            // ── 主窗口（Singleton）──
             sc.AddSingleton<MainWindow>();
 
             return sc.BuildServiceProvider();

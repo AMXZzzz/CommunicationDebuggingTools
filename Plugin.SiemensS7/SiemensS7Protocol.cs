@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Core.Attributes;
 
 namespace Plugin.SiemensS7 {
     /// <summary>
@@ -24,6 +25,7 @@ namespace Plugin.SiemensS7 {
     ///   Float             → Real (0x08)  4 字节 IEEE-754 大端
     ///   Double            → 2×DWord      8 字节大端
     /// </summary>
+    [ProtocolName("Siemens S7")]
     public sealed class SiemensS7Protocol : IProtocol {
 
         private readonly SiemensS7Session _session = new SiemensS7Session();
