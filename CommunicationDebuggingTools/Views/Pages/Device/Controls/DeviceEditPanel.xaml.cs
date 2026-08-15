@@ -5,7 +5,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Services;
+using CommunicationDebuggingTools.Core.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
@@ -34,9 +35,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (cmbProtocol == null)
                 return;
             cmbProtocol.Items.Clear();
-            if (MyAppServices.Protocols == null)
-                return;
-            IList<string> names = MyAppServices.Protocols.GetProtocolNames();
+            IProtocolResolver resolver = CommunicationDebuggingTools.App.Services
+                    ?.GetService<IProtocolResolver>();
+            if (resolver == null) return;
+            IList<string> names = resolver.GetProtocolNames();
             if (names == null)
                 return;
             foreach (string name in names) {

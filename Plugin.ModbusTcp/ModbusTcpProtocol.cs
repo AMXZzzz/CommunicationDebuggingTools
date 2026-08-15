@@ -1,4 +1,6 @@
 ﻿using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Tools;
@@ -11,6 +13,7 @@ namespace Plugin.ModbusTcp {
     /// Modbus TCP 插件入口：实现会话契约与共性报文读写。
     /// 底层 TCP/功能码见 <see cref="ModbusTcpSession"/>；地址与站号仅在本插件内解析。
     /// </summary>
+    [ProtocolName("Modbus TCP")]
     public sealed class ModbusTcpProtocol : IProtocol {
         private readonly ModbusTcpSession _session = new ModbusTcpSession();
         private bool _disposed;
@@ -21,7 +24,6 @@ namespace Plugin.ModbusTcp {
         }
 
         /// <summary>协议显示名，须与设备 Protocol 字段一致。</summary>
-        public string GetProtocolName () {
             return "Modbus TCP";
         }
 
@@ -44,7 +46,7 @@ namespace Plugin.ModbusTcp {
             _session.UnitId = (byte)station;
 
             try {
-                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : AppConfig.DefaultTimeoutMs;
                 await _session.ConnectAsync(context.Ip, context.Port, timeout, cancellationToken);
                 return true;
             } catch {

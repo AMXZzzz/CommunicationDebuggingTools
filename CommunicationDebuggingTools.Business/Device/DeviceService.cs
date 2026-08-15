@@ -1,4 +1,5 @@
 ﻿using System;
+using CommunicationDebuggingTools.Core.Config;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -22,7 +23,7 @@ namespace CommunicationDebuggingTools.Business.Device {
         private readonly ConcurrentDictionary<string, int> _commErrors =
             new ConcurrentDictionary<string, int>();
 
-        private const int COMM_ERROR_THRESHOLD = 3;
+        private const int COMM_ERROR_THRESHOLD = AppConfig.CommErrorThreshold;
 
         private readonly SynchronizationContext _uiContext;
         private int _pinging;

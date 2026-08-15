@@ -1,5 +1,6 @@
 ﻿using CommunicationDebuggingTools.Core.Tools;
 using System;
+using CommunicationDebuggingTools.Core.Config;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
@@ -13,9 +14,11 @@ namespace Plugin.Panasonic {
     /// BCC：对「站号+#命令」整段逐字节异或。
     /// </summary>
     internal sealed class PanasonicSession : IDisposable {
+        private const int DEFAULT_PORT = 9094;
+
         private TcpClient _tcp;
         private NetworkStream _stream;
-        private int _timeoutMs = 3000;
+        private int _timeoutMs = AppConfig.DefaultTimeoutMs;
         private bool _disposed;
         private readonly object _sync = new object();
 
@@ -63,9 +66,9 @@ namespace Plugin.Panasonic {
                 throw new ArgumentException("IP 为空");
 
             if (port <= 0)
-                port = 9094;
+                port = DEFAULT_PORT; // AppConfig 定义协议无关常量，端口默认值保留在插件内
 
-            TimeoutMs = timeoutMs > 0 ? timeoutMs : 3000;
+            TimeoutMs = timeoutMs > 0 ? timeoutMs : AppConfig.DefaultTimeoutMs;
             _tcp = new TcpClient();
 
             var connectTask = _tcp.ConnectAsync(ip, port);

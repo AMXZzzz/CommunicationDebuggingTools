@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
@@ -12,14 +14,14 @@ namespace Plugin.Panasonic {
     /// 松下 MEWTOCOL-COM 协议插件。
     /// 地址 / 站号 / 报文只在本插件与 Session 内处理；UI/Business 不解析。
     /// </summary>
+    [ProtocolName("Panasonic MEWTOCOL")]
+
     public sealed class PanasonicProtocol : IProtocol {
 
         private readonly PanasonicSession _session = new PanasonicSession();
         private bool _disposed;
 
         public bool IsConnected => _session.IsConnected;
-
-        public string GetProtocolName () => "Panasonic MEWTOCOL";
 
         /// <summary>
         /// 建连：Ip/Port/Timeout 来自上下文；站号只用 <see cref="ProtocolConnectionContext.StationNo"/>。
@@ -39,7 +41,7 @@ namespace Plugin.Panasonic {
 
             try {
                 int port = context.Port > 0 ? context.Port : 9094;
-                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : AppConfig.DefaultTimeoutMs;
                 await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken)
                     .ConfigureAwait(false);
                 return true;

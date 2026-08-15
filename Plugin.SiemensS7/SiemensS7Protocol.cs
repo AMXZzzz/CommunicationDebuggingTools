@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Core.Enums;
+using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
@@ -24,6 +26,7 @@ namespace Plugin.SiemensS7 {
     ///   Float             → Real (0x08)  4 字节 IEEE-754 大端
     ///   Double            → 2×DWord      8 字节大端
     /// </summary>
+    [ProtocolName("Siemens S7")]
     public sealed class SiemensS7Protocol : IProtocol {
 
         private readonly SiemensS7Session _session = new SiemensS7Session();
@@ -43,7 +46,6 @@ namespace Plugin.SiemensS7 {
         const byte AREA_DB = 0x84;
 
         public bool IsConnected => _session.IsConnected;
-        public string GetProtocolName () => "Siemens S7";
 
         // ════════════════════════════════════════════════
         //  连接 / 断开
@@ -63,7 +65,7 @@ namespace Plugin.SiemensS7 {
 
             try {
                 int port = context.Port > 0 ? context.Port : 102;
-                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : AppConfig.DefaultTimeoutMs;
                 await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken);
                 return true;
             } catch {

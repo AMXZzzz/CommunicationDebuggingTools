@@ -42,6 +42,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Attributes\ProtocolNameAttribute.cs" />
+    <Compile Include="Config\AppConfig.cs" />
     <Compile Include="Enums\DataOrder.cs" />
     <Compile Include="Enums\DataQuality.cs" />
     <Compile Include="Enums\DeviceStatusType.cs" />
@@ -67,5 +69,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Tools\ProtocolSettingsJson.cs" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

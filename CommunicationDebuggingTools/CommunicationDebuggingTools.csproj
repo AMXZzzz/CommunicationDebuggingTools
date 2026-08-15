@@ -334,12 +334,7 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Assets\" />
-    <Folder Include="Controls\" />
-    <Folder Include="Languages\" />
-    <Folder Include="Services\" />
-  </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <ProjectReference Include="..\CommunicationDebuggingTools.Business\CommunicationDebuggingTools.Business.csproj">
       <Project>{b8d745d0-2789-4ce3-bbd3-45efdfe9cbbf}</Project>

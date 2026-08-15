@@ -1,11 +1,13 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
+using CommunicationDebuggingTools.Core.Attributes;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Tests.Fakes {
     /// <summary>协议桩：会话 + 可配置读写结果。</summary>
+    [ProtocolName("Modbus TCP")]
     public class FakeProtocol : IProtocol {
         public bool ConnectResult { get; set; } = true;
         public int ConnectCallCount { get; private set; }
@@ -37,7 +39,6 @@ namespace CommunicationDebuggingTools.Tests.Fakes {
                 return Task.FromResult(false);
             return Task.FromResult(PingResult);
         }
-        public string GetProtocolName () => "Modbus TCP";
 
         public bool IsConnected { get; private set; }
 

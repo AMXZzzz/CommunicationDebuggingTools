@@ -1,4 +1,5 @@
 ﻿using System;
+using CommunicationDebuggingTools.Core.Config;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -252,12 +253,12 @@ namespace CommunicationDebuggingTools.Business.Device {
                 ByteOrder = device.ByteOrder,
                 WordOrder = device.WordOrder,
                 StringEncoding = device.StringEncoding,
-                TimeoutMs = 3000
+                TimeoutMs = AppConfig.DefaultTimeoutMs
             };
         }
 
         private static Task<bool> ProbeReachableAsync (DeviceInfo device, CancellationToken ct) {
-            return TcpProbe.IsPortOpenAsync(device.Ip, device.Port, 1000, ct);
+            return TcpProbe.IsPortOpenAsync(device.Ip, device.Port, AppConfig.TcpProbeTimeoutMs, ct);
         }
 
         private void CancelConnect (string id) {

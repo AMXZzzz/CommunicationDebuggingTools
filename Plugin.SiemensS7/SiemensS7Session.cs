@@ -1,5 +1,6 @@
 ﻿using CommunicationDebuggingTools.Core.Tools;
 using System;
+using CommunicationDebuggingTools.Core.Config;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Threading;
@@ -8,6 +9,8 @@ using System.Threading.Tasks;
 namespace Plugin.SiemensS7 {
 
     internal sealed class SiemensS7Session : IDisposable {
+        private const int DEFAULT_PORT = 102;
+
 
         private TcpClient     _tcp;
         private NetworkStream _stream;
@@ -54,7 +57,7 @@ namespace Plugin.SiemensS7 {
                 throw new ArgumentException("IP 为空");
 
             port = port > 0 ? port : 102;
-            TimeoutMs = timeoutMs > 0 ? timeoutMs : 3000;
+            TimeoutMs = timeoutMs > 0 ? timeoutMs : AppConfig.DefaultTimeoutMs;
             _tcp = new TcpClient();
 
             var connectTask = _tcp.ConnectAsync(ip, port);

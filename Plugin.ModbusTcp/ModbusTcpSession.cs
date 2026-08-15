@@ -1,4 +1,5 @@
 ﻿using System;
+using CommunicationDebuggingTools.Core.Config;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -16,7 +17,7 @@ namespace Plugin.ModbusTcp {
         private byte _unitId = 1;
         private ushort _transactionId;
         private readonly object _sync = new object();
-        private int _timeoutMs = 3000;
+        private int _timeoutMs = AppConfig.DefaultTimeoutMs;
         private bool _disposed;
 
         public bool IsConnected {
@@ -49,7 +50,7 @@ namespace Plugin.ModbusTcp {
             if (string.IsNullOrWhiteSpace(ip))
                 throw new ArgumentException("IP 为空");
 
-            TimeoutMs = timeoutMs > 0 ? timeoutMs : 3000;
+            TimeoutMs = timeoutMs > 0 ? timeoutMs : AppConfig.DefaultTimeoutMs;
             _tcp = new TcpClient();
 
             var connectTask = _tcp.ConnectAsync(ip, port);
