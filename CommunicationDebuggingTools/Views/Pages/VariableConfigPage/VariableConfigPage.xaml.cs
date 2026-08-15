@@ -8,16 +8,18 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
-
 using CommunicationDebuggingTools.Views.Controls;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage {
+
     /// <summary>
-    /// 变量配置页：组装 Controls；用遮罩 + Visibility 调度
-    /// 编辑 / 批量 / 导入 / 导出 / 主题消息框。
+    /// 变量配置页：组装 Controls；遮罩 + Visibility 调度编辑/批量/导入/导出/消息框。
     /// </summary>
     public partial class VariableConfigPage : Page {
+
         private enum MsgPending {
             None,
             ImportClear
@@ -26,6 +28,9 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private string _selectedDeviceId;
         private string _lastExportPath;
         private MsgPending _msgPending;
+
+        private static T Svc<T> () where T : class =>
+            App.Services != null ? App.Services.GetService<T>() : null;
 
         public VariableConfigPage () {
             InitializeComponent();
@@ -62,7 +67,6 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 exportPanel.CloseRequested -= CloseExport;
                 exportPanel.ExportSucceeded -= OnExportSucceeded;
                 exportPanel.InfoRequested -= OnPanelInfo;
-
                 exportPanel.CloseRequested += CloseExport;
                 exportPanel.ExportSucceeded += OnExportSucceeded;
                 exportPanel.InfoRequested += OnPanelInfo;
@@ -73,7 +77,6 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 importPanel.ConfirmClearRequested -= OnImportConfirmClear;
                 importPanel.ImportSucceeded -= OnImportSucceeded;
                 importPanel.InfoRequested -= OnPanelInfo;
-
                 importPanel.CloseRequested += CloseImport;
                 importPanel.ConfirmClearRequested += OnImportConfirmClear;
                 importPanel.ImportSucceeded += OnImportSucceeded;
@@ -84,7 +87,6 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 msgDialog.CloseRequested -= OnMsgClose;
                 msgDialog.PrimaryRequested -= OnMsgPrimary;
                 msgDialog.SecondaryRequested -= OnMessageSecondary;
-
                 msgDialog.CloseRequested += OnMsgClose;
                 msgDialog.PrimaryRequested += OnMsgPrimary;
                 msgDialog.SecondaryRequested += OnMessageSecondary;
@@ -96,8 +98,6 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             deviceHeader.Show(deviceId);
             variableTable.Load(deviceId);
         }
-
-        // -------------------- 单条 --------------------
 
         private void OpenAdd () {
             if (!EnsureDeviceSelected() || editPanel == null) return;
@@ -115,18 +115,18 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private void CloseEdit () => HidePanel(editPanel);
 
         private void SaveEdit () {
-            if (editPanel == null || MyAppServices.Variables == null) return;
+            IVariableService vars = Svc<IVariableService>();
+            if (editPanel == null || vars == null) return;
 
             VariableItem built = editPanel.Build();
             if (built == null) return;
-
             if (string.IsNullOrEmpty(built.DeviceId))
                 built.DeviceId = _selectedDeviceId;
 
             if (editPanel.IsNew)
-                MyAppServices.Variables.Add(built);
+                vars.Add(built);
             else
-                MyAppServices.Variables.Update(built);
+                vars.Update(built);
 
             CloseEdit();
             RefreshList();
@@ -135,14 +135,14 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private void DeleteEdit () {
             if (editPanel == null || editPanel.IsNew || string.IsNullOrEmpty(editPanel.EditingId))
                 return;
-            if (MyAppServices.Variables == null) return;
 
-            MyAppServices.Variables.Remove(editPanel.EditingId);
+            IVariableService vars = Svc<IVariableService>();
+            if (vars == null) return;
+
+            vars.Remove(editPanel.EditingId);
             CloseEdit();
             RefreshList();
         }
-
-        // -------------------- 批量 --------------------
 
         private void OpenBatch () {
             if (!EnsureDeviceSelected() || batchPanel == null) return;
@@ -153,20 +153,19 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private void CloseBatch () => HidePanel(batchPanel);
 
         private void SaveBatch (IList<VariableItem> items) {
-            if (items == null || MyAppServices.Variables == null || string.IsNullOrEmpty(_selectedDeviceId))
+            IVariableService vars = Svc<IVariableService>();
+            if (items == null || vars == null || string.IsNullOrEmpty(_selectedDeviceId))
                 return;
 
             foreach (VariableItem v in items) {
                 if (v == null) continue;
                 v.DeviceId = _selectedDeviceId;
-                MyAppServices.Variables.Add(v);
+                vars.Add(v);
             }
 
             CloseBatch();
             RefreshList();
         }
-
-        // -------------------- 导出 --------------------
 
         private void OpenExport () {
             if (exportPanel == null) return;
@@ -196,8 +195,6 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 detailAsBox: true);
             ShowPanel(msgDialog);
         }
-
-        // -------------------- 导入 --------------------
 
         private void OpenImport () {
             if (importPanel == null) return;
@@ -235,13 +232,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             ShowPanel(msgDialog);
         }
 
-        // -------------------- 主题消息框 --------------------
-
         private void OnMsgPrimary () {
             MsgPending pending = _msgPending;
             _msgPending = MsgPending.None;
             HidePanel(msgDialog);
-
             if (pending == MsgPending.ImportClear)
                 importPanel?.ExecuteImport();
         }
@@ -274,10 +268,11 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private async void OnVariableWriteRequested (string variableId, string writeText) {
-            if (string.IsNullOrWhiteSpace(variableId) || MyAppServices.Variables == null)
+            IVariableService vars = Svc<IVariableService>();
+            if (string.IsNullOrWhiteSpace(variableId) || vars == null)
                 return;
 
-            VariableItem variable = MyAppServices.Variables.Variables
+            VariableItem variable = vars.Variables
                 .FirstOrDefault(v => v != null && v.Id == variableId);
             if (variable == null) {
                 ShowInfo("写入失败", "变量不存在");
@@ -291,8 +286,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
 
             bool ok;
             try {
-                ok = await MyAppServices.Variables
-                    .WriteAsync(variableId, value, CancellationToken.None);
+                ok = await vars.WriteAsync(variableId, value, CancellationToken.None);
             } catch (ArgumentException ex) {
                 ShowInfo("写入失败", ex.Message);
                 return;
@@ -382,7 +376,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                     return false;
 
                 case Core.Enums.VariableDataType.Float:
-                    if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float f)) {
+                    if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands,
+                            CultureInfo.InvariantCulture, out float f)) {
                         value = f;
                         return true;
                     }
@@ -390,7 +385,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                     return false;
 
                 case Core.Enums.VariableDataType.Double:
-                    if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double d)) {
+                    if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands,
+                            CultureInfo.InvariantCulture, out double d)) {
                         value = d;
                         return true;
                     }
@@ -423,8 +419,6 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 showSecondary: false);
             ShowPanel(msgDialog);
         }
-
-        // -------------------- 遮罩 --------------------
 
         private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
             CloseAllPanels();
@@ -476,18 +470,16 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private static bool IsShown (UIElement e) =>
             e != null && e.Visibility == Visibility.Visible;
 
-        // -------------------- 工具 --------------------
-
         private void RefreshList () {
             variableTable.Load(_selectedDeviceId);
             deviceList.Reload();
         }
 
         private int CountCurrentVariables () {
-            if (MyAppServices.Variables == null || string.IsNullOrEmpty(_selectedDeviceId))
+            IVariableService vars = Svc<IVariableService>();
+            if (vars == null || string.IsNullOrEmpty(_selectedDeviceId))
                 return 0;
-            return MyAppServices.Variables.Variables
-                .Count(v => v != null && v.DeviceId == _selectedDeviceId);
+            return vars.Variables.Count(v => v != null && v.DeviceId == _selectedDeviceId);
         }
 
         private bool EnsureDeviceSelected () {
@@ -498,10 +490,11 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private string GetSelectedDeviceTitle () {
-            if (MyAppServices.Devices == null || string.IsNullOrEmpty(_selectedDeviceId))
+            IDeviceService devices = Svc<IDeviceService>();
+            if (devices == null || string.IsNullOrEmpty(_selectedDeviceId))
                 return "";
 
-            DeviceInfo d = MyAppServices.Devices.Devices
+            DeviceInfo d = devices.Devices
                 .FirstOrDefault(x => x != null && x.Id == _selectedDeviceId);
             if (d == null) return "";
 
