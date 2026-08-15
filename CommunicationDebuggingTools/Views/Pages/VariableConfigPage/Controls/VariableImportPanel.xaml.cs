@@ -9,23 +9,20 @@ using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
     /// 导入变量弹层（一期 JSON）。
     /// 清空确认 / 成功提示由页面通过事件用 AppMessageDialog 展示。
+    /// 服务由页面注入 <see cref="VariableService"/> / <see cref="DeviceService"/>，禁止 Svc。
     /// </summary>
     public partial class VariableImportPanel : UserControl {
-        /// <summary>
-        /// 从 DI 容器解析服务。
-        /// UserControl 由 XAML 实例化，无法构造注入；此为迁移期过渡方案。
-        /// 全局只有 Singleton，GetRequiredService 成本极低。
-        /// </summary>
-        private static T Svc<T> () where T : class =>
-            CommunicationDebuggingTools.App.Services
-                .GetRequiredService<T>();
+        /// <summary>由页面注入。</summary>
+        public IVariableService VariableService { get; set; }
+
+        /// <summary>由页面注入。</summary>
+        public IDeviceService DeviceService { get; set; }
 
         public event Action CloseRequested;
 
@@ -158,10 +155,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
         private HashSet<string> BuildExistingKeys () {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (Svc<IVariableService>() == null)
+            if (VariableService == null)
                 return set;
 
-            foreach (VariableItem v in Svc<IVariableService>().Variables) {
+            foreach (VariableItem v in VariableService.Variables) {
                 if (v == null || string.IsNullOrEmpty(v.Address)) continue;
                 if (_scopeCurrent && v.DeviceId != _deviceId) continue;
                 set.Add(v.DeviceId + "|" + v.Address);
@@ -186,8 +183,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             } else {
                 deviceId = (r.DeviceId ?? "").Trim();
                 if (string.IsNullOrEmpty(deviceId) ||
-                    Svc<IDeviceService>() == null ||
-                    Svc<IDeviceService>().Devices.All(d => d == null || d.Id != deviceId)) {
+                    DeviceService == null ||
+                    DeviceService.Devices.All(d => d == null || d.Id != deviceId)) {
                     fail = "deviceId";
                     return false;
                 }
@@ -253,7 +250,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         }
 
         private void BtnImport_Click (object sender, RoutedEventArgs e) {
-            if (_accepted.Count == 0 || Svc<IVariableService>() == null)
+            if (_accepted.Count == 0 || VariableService == null)
                 return;
 
             if (chkClear.IsChecked == true) {
@@ -266,11 +263,12 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             ExecuteImport();
         }
 
-        private void Root_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) => e.Handled = true;
+        private void Root_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
+            e.Handled = true;
 
         /// <summary>页面确认清空后，或无需清空时直接调用。</summary>
         public void ExecuteImport () {
-            if (_accepted.Count == 0 || Svc<IVariableService>() == null)
+            if (_accepted.Count == 0 || VariableService == null)
                 return;
 
             try {
@@ -278,7 +276,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                     ClearTarget();
 
                 foreach (VariableItem v in _accepted)
-                    Svc<IVariableService>().Add(v);
+                    VariableService.Add(v);
 
                 int n = _accepted.Count;
                 CloseRequested?.Invoke();
@@ -289,10 +287,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         }
 
         private void ClearTarget () {
-            if (Svc<IVariableService>() == null) return;
+            if (VariableService == null) return;
 
             var ids = new List<string>();
-            foreach (VariableItem v in Svc<IVariableService>().Variables) {
+            foreach (VariableItem v in VariableService.Variables) {
                 if (v == null) continue;
                 if (_scopeCurrent) {
                     if (v.DeviceId == _deviceId)
@@ -303,7 +301,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             }
 
             foreach (string id in ids)
-                Svc<IVariableService>().Remove(id);
+                VariableService.Remove(id);
         }
 
         private void BtnClose_Click (object sender, RoutedEventArgs e) =>

@@ -11,31 +11,60 @@ using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Views.Controls;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage {
-
     /// <summary>
-    /// 变量配置页：组装 Controls；遮罩 + Visibility 调度编辑/批量/导入/导出/消息框。
+    /// 变量配置页：组装 Controls；遮罩 + Visibility 调度编辑 / 批量 / 导入 / 导出 / 主题消息框。
+    /// 服务通过构造函数注入，再赋值给 XAML 实例化的子控件（属性注入）。
     /// </summary>
     public partial class VariableConfigPage : Page {
-
         private enum MsgPending {
             None,
             ImportClear
         }
 
+        private readonly IVariableService _variables;
+        private readonly IDeviceService _devices;
+
         private string _selectedDeviceId;
         private string _lastExportPath;
         private MsgPending _msgPending;
 
-        private static T Svc<T> () where T : class =>
-            App.Services != null ? App.Services.GetService<T>() : null;
+        /// <summary>
+        /// DI 构造：由 App 容器以 Transient 创建本页时注入。
+        /// </summary>
+        public VariableConfigPage (IVariableService variables, IDeviceService devices) {
+            _variables = variables ?? throw new ArgumentNullException(nameof(variables));
+            _devices = devices ?? throw new ArgumentNullException(nameof(devices));
 
-        public VariableConfigPage () {
             InitializeComponent();
+            InjectServicesIntoControls();
             WireEvents();
             deviceList.Reload();
+        }
+
+        /// <summary>
+        /// XAML 实例化的子控件无法构造注入，由页面统一赋值。
+        /// </summary>
+        private void InjectServicesIntoControls () {
+            if (variableTable != null)
+                variableTable.VariableService = _variables;
+
+            if (deviceList != null) {
+                deviceList.DeviceService = _devices;
+                deviceList.VariableService = _variables;
+            }
+
+            if (deviceHeader != null)
+                deviceHeader.DeviceService = _devices;
+
+            if (exportPanel != null)
+                exportPanel.VariableService = _variables;
+
+            if (importPanel != null) {
+                importPanel.VariableService = _variables;
+                importPanel.DeviceService = _devices;
+            }
         }
 
         private void WireEvents () {
@@ -115,18 +144,18 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private void CloseEdit () => HidePanel(editPanel);
 
         private void SaveEdit () {
-            IVariableService vars = Svc<IVariableService>();
-            if (editPanel == null || vars == null) return;
+            if (editPanel == null) return;
 
             VariableItem built = editPanel.Build();
             if (built == null) return;
+
             if (string.IsNullOrEmpty(built.DeviceId))
                 built.DeviceId = _selectedDeviceId;
 
             if (editPanel.IsNew)
-                vars.Add(built);
+                _variables.Add(built);
             else
-                vars.Update(built);
+                _variables.Update(built);
 
             CloseEdit();
             RefreshList();
@@ -136,10 +165,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             if (editPanel == null || editPanel.IsNew || string.IsNullOrEmpty(editPanel.EditingId))
                 return;
 
-            IVariableService vars = Svc<IVariableService>();
-            if (vars == null) return;
-
-            vars.Remove(editPanel.EditingId);
+            _variables.Remove(editPanel.EditingId);
             CloseEdit();
             RefreshList();
         }
@@ -153,14 +179,13 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private void CloseBatch () => HidePanel(batchPanel);
 
         private void SaveBatch (IList<VariableItem> items) {
-            IVariableService vars = Svc<IVariableService>();
-            if (items == null || vars == null || string.IsNullOrEmpty(_selectedDeviceId))
+            if (items == null || string.IsNullOrEmpty(_selectedDeviceId))
                 return;
 
             foreach (VariableItem v in items) {
                 if (v == null) continue;
                 v.DeviceId = _selectedDeviceId;
-                vars.Add(v);
+                _variables.Add(v);
             }
 
             CloseBatch();
@@ -268,12 +293,12 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private async void OnVariableWriteRequested (string variableId, string writeText) {
-            IVariableService vars = Svc<IVariableService>();
-            if (string.IsNullOrWhiteSpace(variableId) || vars == null)
+            if (string.IsNullOrWhiteSpace(variableId))
                 return;
 
-            VariableItem variable = vars.Variables
+            VariableItem variable = _variables.Variables
                 .FirstOrDefault(v => v != null && v.Id == variableId);
+
             if (variable == null) {
                 ShowInfo("写入失败", "变量不存在");
                 return;
@@ -286,7 +311,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
 
             bool ok;
             try {
-                ok = await vars.WriteAsync(variableId, value, CancellationToken.None);
+                ok = await _variables.WriteAsync(variableId, value, CancellationToken.None);
             } catch (ArgumentException ex) {
                 ShowInfo("写入失败", ex.Message);
                 return;
@@ -476,10 +501,9 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private int CountCurrentVariables () {
-            IVariableService vars = Svc<IVariableService>();
-            if (vars == null || string.IsNullOrEmpty(_selectedDeviceId))
+            if (string.IsNullOrEmpty(_selectedDeviceId))
                 return 0;
-            return vars.Variables.Count(v => v != null && v.DeviceId == _selectedDeviceId);
+            return _variables.Variables.Count(v => v != null && v.DeviceId == _selectedDeviceId);
         }
 
         private bool EnsureDeviceSelected () {
@@ -490,11 +514,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private string GetSelectedDeviceTitle () {
-            IDeviceService devices = Svc<IDeviceService>();
-            if (devices == null || string.IsNullOrEmpty(_selectedDeviceId))
+            if (string.IsNullOrEmpty(_selectedDeviceId))
                 return "";
 
-            DeviceInfo d = devices.Devices
+            DeviceInfo d = _devices.Devices
                 .FirstOrDefault(x => x != null && x.Id == _selectedDeviceId);
             if (d == null) return "";
 

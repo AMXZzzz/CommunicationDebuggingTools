@@ -5,29 +5,29 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CommunicationDebuggingTools.Core.Enums;
-using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
+using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
     /// PLC 设备卡片。
     /// 数据来自依赖属性 <see cref="Device"/>；文本由 XAML 绑定；
-    /// 状态灯/主按钮由 <see cref="ApplyStatusVisual"/> 更新；
+    /// 状态灯 / 主按钮由 <see cref="ApplyStatusVisual"/> 更新；
     /// 多选时通过 <see cref="SetSelectionMode"/> 显示隐藏 CheckBox。
+    /// <para>
+    /// 服务：由父页 <c>DevicePage</c> 通过属性注入 <see cref="DeviceService"/>，
+    /// 不再使用 Svc&lt;T&gt; 服务定位器。
+    /// </para>
     /// </summary>
     public partial class DeviceCard : UserControl {
-        /// <summary>
-        /// 从 DI 容器解析服务。
-        /// UserControl 由 XAML 实例化，无法构造注入；此为迁移期过渡方案。
-        /// 全局只有 Singleton，GetRequiredService 成本极低。
-        /// </summary>
-        private static T Svc<T> () where T : class =>
-            CommunicationDebuggingTools.App.Services
-                .GetRequiredService<T>();
-
         /// <summary>当前已订阅 PropertyChanged 的设备。</summary>
         private DeviceInfo _subscribed;
+
+        /// <summary>
+        /// 设备业务服务（连接 / 断开）。
+        /// 由 DevicePage 在创建卡片或列表重建后赋值。
+        /// </summary>
+        public IDeviceService DeviceService { get; set; }
 
         /// <summary>勾选变化（设备 Id, 是否选中）。页面侧可选使用。</summary>
         public event Action<string, bool> SelectionChanged;
@@ -85,11 +85,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (info == null || string.IsNullOrEmpty(info.Id))
                 return;
 
-            if (SelectionChanged != null)
-                SelectionChanged(info.Id, IsSelected);
+            SelectionChanged?.Invoke(info.Id, IsSelected);
         }
 
-        /// <summary>卸下时取消 PropertyChanged 订阅。</summary>
+        /// <summary>卸下时取消 PropertyChanged 订阅，避免泄漏。</summary>
         private void DeviceCard_Unloaded (object sender, RoutedEventArgs e) {
             if (_subscribed != null) {
                 _subscribed.PropertyChanged -= Device_PropertyChanged;
@@ -142,8 +141,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                     statusKey = "Success";
                     break;
                 case DeviceStatusType.Connecting:
-                    statusKey = "Warning";
-                    break;
                 case DeviceStatusType.Warning:
                     statusKey = "Warning";
                     break;
@@ -221,8 +218,12 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (info == null || string.IsNullOrEmpty(info.Id))
                 return;
 
+            if (DeviceService == null)
+                return;
+
+            // 已连接或连接中 → 断开 / 取消
             if (info.IsConnected || info.StatusType == DeviceStatusType.Connecting) {
-                Svc<IDeviceService>().Disconnect(info.Id);
+                DeviceService.Disconnect(info.Id);
                 return;
             }
 
@@ -235,7 +236,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             string id = info.Id;
 
             try {
-                await Svc<IDeviceService>().ConnectAsync(id, CancellationToken.None);
+                await DeviceService.ConnectAsync(id, CancellationToken.None);
             } catch {
                 if (Device != null && Device.Id == id) {
                     Device.IsConnected = false;

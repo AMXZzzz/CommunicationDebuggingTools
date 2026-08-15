@@ -7,19 +7,14 @@ using System.Windows.Media;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>左侧设备列表。选中时触发 <see cref="DeviceSelected"/>。</summary>
     public partial class VariableDeviceList : UserControl {
-        /// <summary>
-        /// 从 DI 容器解析服务。
-        /// UserControl 由 XAML 实例化，无法构造注入；此为迁移期过渡方案。
-        /// 全局只有 Singleton，GetRequiredService 成本极低。
-        /// </summary>
-        private static T Svc<T> () where T : class =>
-            CommunicationDebuggingTools.App.Services
-                .GetRequiredService<T>();
+        /// <summary>由页面注入。</summary>
+        public IDeviceService DeviceService { get; set; }
+        /// <summary>由页面注入。</summary>
+        public IVariableService VariableService { get; set; }
 
         public event Action<string> DeviceSelected;
 
@@ -36,8 +31,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             string keep = _selectedId;
             _items.Clear();
 
-            if (Svc<IDeviceService>() != null) {
-                foreach (DeviceInfo d in Svc<IDeviceService>().Devices) {
+            if (DeviceService != null) {
+                foreach (DeviceInfo d in DeviceService.Devices) {
                     if (d == null) continue;
                     _items.Add(Row.From(d, CountVars(d.Id), BrushOf));
                 }
@@ -64,10 +59,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 DeviceSelected(_selectedId);
         }
 
-        private static int CountVars (string deviceId) {
-            if (Svc<IVariableService>() == null || string.IsNullOrEmpty(deviceId))
+        private int CountVars (string deviceId) {
+            if (VariableService == null || string.IsNullOrEmpty(deviceId))
                 return 0;
-            return Svc<IVariableService>().Variables.Count(v => v != null && v.DeviceId == deviceId);
+            return VariableService.Variables.Count(v => v != null && v.DeviceId == deviceId);
         }
 
         private Brush BrushOf (DeviceStatusType status) {

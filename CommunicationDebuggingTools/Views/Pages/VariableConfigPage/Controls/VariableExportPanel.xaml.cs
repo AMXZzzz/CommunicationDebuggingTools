@@ -8,23 +8,17 @@ using System.Windows.Controls;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
     /// 导出变量弹层（一期仅 JSON）。
     /// 成功后通过 <see cref="ExportSucceeded"/> 通知页面弹主题成功框，不再使用 MessageBox。
+    /// 服务由页面注入 <see cref="VariableService"/>，禁止 Svc。
     /// </summary>
     public partial class VariableExportPanel : UserControl {
-        /// <summary>
-        /// 从 DI 容器解析服务。
-        /// UserControl 由 XAML 实例化，无法构造注入；此为迁移期过渡方案。
-        /// 全局只有 Singleton，GetRequiredService 成本极低。
-        /// </summary>
-        private static T Svc<T> () where T : class =>
-            CommunicationDebuggingTools.App.Services
-                .GetRequiredService<T>();
+        /// <summary>由页面注入。</summary>
+        public IVariableService VariableService { get; set; }
 
         /// <summary>请求关闭本面板。</summary>
         public event Action CloseRequested;
@@ -85,10 +79,10 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             CloseRequested?.Invoke();
 
         private void BtnExport_Click (object sender, RoutedEventArgs e) {
-            if (Svc<IVariableService>() == null)
+            if (VariableService == null)
                 return;
 
-            IEnumerable<VariableItem> query = Svc<IVariableService>().Variables
+            IEnumerable<VariableItem> query = VariableService.Variables
                 .Where(v => v != null);
 
             if (_scopeCurrent) {
