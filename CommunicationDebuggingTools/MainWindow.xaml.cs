@@ -2,69 +2,50 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-
-/*
- 日志: 
-    1. 没做实时读取
-    3. 离线等状态为实时更新状态, 
-    4. 考虑增加弹出的窗口可移动(上下边界可拖动)
-    5. MES启动,自动开始连接
-    6. 完美全屏优化(上方做成单独用户控件, 尝试完全自己写(增强知识))
- */
-
-
-
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools {
+
     /// <summary>
-    /// 主窗口：自定义无边框窗口，顶栏 + 侧栏（<see cref="Views.Controls.NavSidebar"/>）+ 内容 Frame。
-    /// 导航由 NavSidebar 通过 NavigateRequested 通知，本窗口负责创建页面并 Navigate。
+    /// 主窗口：无边框布局 + 侧栏导航。
+    /// 页面通过 IServiceProvider 创建——支持构造注入，无需 Activator.CreateInstance。
     /// </summary>
     public partial class MainWindow : Window {
-        /// <summary>
-        /// 初始化布局，订阅侧栏导航事件，并进入默认页（MES 监控）。
-        /// </summary>
-        public MainWindow () {
+
+        private readonly IServiceProvider _services;
+
+        public MainWindow (IServiceProvider services) {
+            _services = services ?? throw new ArgumentNullException(nameof(services));
             InitializeComponent();
 
             if (navSidebar != null)
-                navSidebar.NavigateRequested += NavSidebar_NavigateRequested;
+                navSidebar.NavigateRequested += NavigateTo;
 
-            MainFrame.Navigate(new Views.Pages.Monitor.DataMonitorPage());
+            // 默认页：MES 监控
+            NavigateTo(typeof(Views.Pages.Monitor.DataMonitorPage));
         }
 
         /// <summary>
-        /// 侧栏选中导航项：按页面 Type 创建实例并显示到 MainFrame。
+        /// 从 DI 容器解析页面实例并导航。
+        /// 支持构造注入（DevicePage、VariableConfigPage、LogPage 各有 VM 注入）。
         /// </summary>
-        private void NavSidebar_NavigateRequested (Type pageType) {
-            if (MainFrame == null || pageType == null)
-                return;
+        private void NavigateTo (Type pageType) {
+            if (MainFrame == null || pageType == null) return;
+            if (!typeof(Page).IsAssignableFrom(pageType)) return;
 
-            if (!typeof(Page).IsAssignableFrom(pageType))
-                return;
-
-            Page page = Activator.CreateInstance(pageType) as Page;
+            Page page = _services.GetRequiredService(pageType) as Page;
             if (page != null)
                 MainFrame.Navigate(page);
         }
 
-        /// <summary>
-        /// 顶栏拖动区域：按下左键拖动窗口。
-        /// </summary>
+        // ── 无边框窗口控件 ────────────────────────────
+
         private void Window_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
-            if (e.ButtonState == MouseButtonState.Pressed)
-                DragMove();
+            if (e.ButtonState == MouseButtonState.Pressed) DragMove();
         }
 
-        /// <summary>
-        /// 语言切换（预留）。
-        /// </summary>
-        private void BtnLanguage_Click (object sender, RoutedEventArgs e) {
-        }
+        private void BtnLanguage_Click (object sender, RoutedEventArgs e) { /* 预留 */ }
 
-        /// <summary>
-        /// 全屏 / 退出全屏。
-        /// </summary>
         private void BtnFullscreen_Click (object sender, RoutedEventArgs e) {
             if (WindowState != WindowState.Maximized) {
                 WindowState = WindowState.Maximized;
@@ -75,27 +56,13 @@ namespace CommunicationDebuggingTools {
             }
         }
 
-        /// <summary>
-        /// 最小化。
-        /// </summary>
-        private void BtnMinimize_Click (object sender, RoutedEventArgs e) {
+        private void BtnMinimize_Click (object sender, RoutedEventArgs e) =>
             WindowState = WindowState.Minimized;
-        }
 
-        /// <summary>
-        /// 最大化 / 还原。
-        /// </summary>
-        private void BtnMaximize_Click (object sender, RoutedEventArgs e) {
+        private void BtnMaximize_Click (object sender, RoutedEventArgs e) =>
             WindowState = WindowState == WindowState.Maximized
-                ? WindowState.Normal
-                : WindowState.Maximized;
-        }
+                ? WindowState.Normal : WindowState.Maximized;
 
-        /// <summary>
-        /// 关闭应用程序。
-        /// </summary>
-        private void BtnClose_Click (object sender, RoutedEventArgs e) {
-            Close();
-        }
+        private void BtnClose_Click (object sender, RoutedEventArgs e) => Close();
     }
 }

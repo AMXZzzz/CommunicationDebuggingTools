@@ -1,57 +1,36 @@
 ﻿using System;
-using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using CommunicationDebuggingTools.Core.Logging;
-using CommunicationDebuggingTools.Services;
+using CommunicationDebuggingTools.ViewModels;
 
 namespace CommunicationDebuggingTools.Views.Pages.Log {
+
     /// <summary>
-    /// 通讯日志页：订阅 <see cref="MyAppServices.Logger"/>，展示环形缓冲。
+    /// 通讯日志页 code-behind：绑定 VM，将后台 EntryAdded 事件调度到 UI 线程。
     /// </summary>
     public partial class LogPage : Page {
-        private readonly ObservableCollection<LogEntry> _items =
-            new ObservableCollection<LogEntry>();
 
-        public LogPage () {
+        private readonly LogPageViewModel _vm;
+
+        public LogPage (LogPageViewModel viewModel) {
+            _vm = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             InitializeComponent();
-            listLog.ItemsSource = _items;
-            Loaded += OnLoaded;
-            Unloaded += OnUnloaded;
-        }
+            DataContext = _vm;
 
-        private void OnLoaded (object sender, RoutedEventArgs e) {
-            _items.Clear();
+            listLog.ItemsSource = _vm.Entries;
 
-            if (MyAppServices.Logger == null)
-                return;
-
-            foreach (LogEntry entry in MyAppServices.Logger.GetRecent())
-                _items.Add(entry);
-
-            MyAppServices.Logger.EntryAdded += OnEntryAdded;
-        }
-
-        private void OnUnloaded (object sender, RoutedEventArgs e) {
-            if (MyAppServices.Logger != null)
-                MyAppServices.Logger.EntryAdded -= OnEntryAdded;
+            // EntryAdded 从后台线程触发，必须 Dispatcher 调度
+            _vm.EntryAdded += OnEntryAdded;
+            Unloaded += (_, __) => _vm.EntryAdded -= OnEntryAdded;
         }
 
         private void OnEntryAdded (LogEntry entry) {
-            if (entry == null)
-                return;
-
             Dispatcher.BeginInvoke(new Action(() => {
-                _items.Add(entry);
-                if (_items.Count > 0)
-                    listLog.ScrollIntoView(_items[_items.Count - 1]);
+                _vm.AppendEntry(entry);
+                if (_vm.Entries.Count > 0)
+                    listLog.ScrollIntoView(_vm.Entries[_vm.Entries.Count - 1]);
             }));
-        }
-
-        private void BtnClear_Click (object sender, RoutedEventArgs e) {
-            if (MyAppServices.Logger != null)
-                MyAppServices.Logger.Clear();
-            _items.Clear();
         }
     }
 }

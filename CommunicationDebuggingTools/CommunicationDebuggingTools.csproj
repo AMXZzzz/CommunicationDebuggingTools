@@ -55,10 +55,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="ViewModels\DevicePageViewModel.cs" />
+    <Compile Include="ViewModels\LogPageViewModel.cs" />
+    <Compile Include="ViewModels\RelayCommand.cs" />
+    <Compile Include="ViewModels\VariablePageViewModel.cs" />
+    <Compile Include="ViewModels\ViewModelBase.cs" />
     <Compile Include="Views\Controls\AppMessageDialog.xaml.cs">
       <DependentUpon>AppMessageDialog.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Services\MyAppServices.cs" />
     <Compile Include="Views\Controls\NavSidebar.xaml.cs">
       <DependentUpon>NavSidebar.xaml</DependentUpon>
     </Compile>
@@ -334,6 +338,7 @@
     <Folder Include="Assets\" />
     <Folder Include="Controls\" />
     <Folder Include="Languages\" />
+    <Folder Include="Services\" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CommunicationDebuggingTools.Business\CommunicationDebuggingTools.Business.csproj">
@@ -346,12 +351,12 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-    <PropertyGroup>
-      <PreBuildEvent>
+  <PropertyGroup>
+    <PreBuildEvent>
     if not exist "$(TargetDir)plugins" mkdir "$(TargetDir)plugins"
     if exist "$(SolutionDir)Plugin.ModbusTcp\bin\$(ConfigurationName)\Plugin.ModbusTcp.dll" xcopy /Y /D "$(SolutionDir)Plugin.ModbusTcp\bin\$(ConfigurationName)\Plugin.ModbusTcp.dll" "$(TargetDir)plugins\"
     if exist "$(SolutionDir)Plugin.Panasonic\bin\$(ConfigurationName)\Plugin.Panasonic.dll" xcopy /Y /D "$(SolutionDir)Plugin.Panasonic\bin\$(ConfigurationName)\Plugin.Panasonic.dll" "$(TargetDir)plugins\"
     if exist "$(SolutionDir)Plugin.SiemensS7\bin\$(ConfigurationName)\Plugin.SiemensS7.dll" xcopy /Y /D "$(SolutionDir)Plugin.SiemensS7\bin\$(ConfigurationName)\Plugin.SiemensS7.dll" "$(TargetDir)plugins\"
       </PreBuildEvent>
-    </PropertyGroup>
+  </PropertyGroup>
 </Project>

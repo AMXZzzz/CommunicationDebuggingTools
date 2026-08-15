@@ -50,6 +50,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Tools\ProtocolResolver.cs" />
     <Compile Include="Tools\TcpProbe.cs" />
+    <Compile Include="Tools\ValueParser.cs" />
     <Compile Include="Variable\PollingEngine.cs" />
     <Compile Include="Variable\VariableService.cs" />
   </ItemGroup>
