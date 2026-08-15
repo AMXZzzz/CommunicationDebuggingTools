@@ -1,4 +1,7 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.ViewModels;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Windows;
@@ -6,8 +9,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.ViewModels;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
 
@@ -19,11 +20,16 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
         private readonly DevicePageViewModel _vm;
 
-        public DevicePage (DevicePageViewModel vm) {
+        private readonly DevicePageViewModel _vm;
+        private readonly IProtocolResolver _protocols;
+
+        public DevicePage (DevicePageViewModel vm, IProtocolResolver protocols) {
             if (vm == null)
                 throw new ArgumentNullException(nameof(vm));
 
             _vm = vm;
+            _protocols = protocols; // 可为 null，编辑面板会显示空协议列表
+
             InitializeComponent();
 
             DataContext = _vm;
@@ -36,11 +42,32 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (toolBar != null)
                 toolBar.SetCount(_vm.DeviceCount);
 
-            // 列表增删后卡片重建 → 延后到布局完成再注入
             _vm.DisplayList.CollectionChanged += DisplayList_CollectionChanged;
             Loaded += (_, __) => InjectServicesToCards();
 
             Unloaded += DevicePage_Unloaded;
+        }
+
+        private void WireEditPanel () {
+            if (editPanel == null) return;
+
+            // 属性注入：协议下拉不再访问 App.Services
+            editPanel.ProtocolResolver = _protocols;
+
+            editPanel.CloseRequested += CloseEditPanel;
+            editPanel.SaveRequested += () => {
+                DeviceInfo info = editPanel.BuildDeviceInfo();
+                _vm.SaveDevice(info, editPanel.IsNew);
+                CloseEditPanel();
+            };
+            editPanel.DeleteRequested += () => {
+                if (!editPanel.IsNew) {
+                    DeviceInfo info = editPanel.BuildDeviceInfo();
+                    if (info != null && !string.IsNullOrEmpty(info.Id))
+                        _vm.RemoveDevice(info.Id);
+                }
+                CloseEditPanel();
+            };
         }
 
         private void DisplayList_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) {
