@@ -4,7 +4,7 @@
 
 namespace CommunicationDebuggingTools.Core.Models {
     /// <summary>
-    /// 协议读写共性报文。
+    /// 读写报文。
     /// Business 填充请求字段，插件回填 Value / Success / Quality / ErrorMessage。
     /// Address 为不透明字符串，仅插件内解析。
     /// </summary>

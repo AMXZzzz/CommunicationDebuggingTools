@@ -42,8 +42,8 @@ namespace Plugin.SiemensS7 {
         }
 
         public void ApplySettingsJson (string json) {
-            Rack = ProtocolSettingsJson.GetInt(json, "rack", 0);
-            Slot = ProtocolSettingsJson.GetInt(json, "slot", 1);
+            Rack = ExtraSettingsJsonHelper.GetInt(json, "rack", 0);
+            Slot = ExtraSettingsJsonHelper.GetInt(json, "slot", 1);
             if (Rack < 0) Rack = 0;
             if (Slot < 0) Slot = 0;
         }

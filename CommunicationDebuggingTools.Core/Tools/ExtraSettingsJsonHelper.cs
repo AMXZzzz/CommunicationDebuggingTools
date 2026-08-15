@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Web.Script.Serialization;
 
 namespace CommunicationDebuggingTools.Core.Tools {
+
     /// <summary>
-    /// 解析设备 ProtocolSettingsJson（扁平数字字段）。
-    /// 插件只取键值，不在此解释协议语义。
+    /// 解析 <c>ExtraSettingsJson</c> 中的扁平整型字段（仅插件内部使用）。
+    /// Core / Business / UI 不得用本类解读业务语义；站号禁止出现在本 JSON 中。
     /// </summary>
-    public static class ProtocolSettingsJson {
+    public static class ExtraSettingsJsonHelper {
+
         /// <summary>读取整型字段；缺失或非法时返回 defaultValue。</summary>
         public static int GetInt (string json, string key, int defaultValue) {
             if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(key))
@@ -29,10 +31,8 @@ namespace CommunicationDebuggingTools.Core.Tools {
 
                 if (raw == null)
                     return defaultValue;
-
                 if (raw is int)
                     return (int)raw;
-
                 if (raw is long)
                     return (int)(long)raw;
 
@@ -40,7 +40,6 @@ namespace CommunicationDebuggingTools.Core.Tools {
                 if (int.TryParse(Convert.ToString(raw), out v))
                     return v;
             } catch {
-                // 解析失败用默认值
             }
 
             return defaultValue;

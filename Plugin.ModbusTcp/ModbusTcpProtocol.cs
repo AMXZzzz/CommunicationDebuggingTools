@@ -24,12 +24,12 @@ namespace Plugin.ModbusTcp {
         }
 
         /// <summary>协议显示名，须与设备 Protocol 字段一致。</summary>
-            return "Modbus TCP";
+        public string Name {
+            get { return "Modbus TCP"; }
         }
 
         /// <summary>
-        /// 使用共性连接上下文建连。
-        /// unitId 只从 <see cref="ProtocolConnectionContext.ProtocolSettingsJson"/> 解析。
+        /// 使用共性连接上下文建连。站号只读 <see cref="ProtocolConnectionContext.StationNo"/>（映射为 UnitId）。
         /// </summary>
         public async Task<bool> ConnectAsync (
             ProtocolConnectionContext context,
@@ -286,7 +286,7 @@ namespace Plugin.ModbusTcp {
         /// 从 ProtocolSettingsJson 解析 unitId；非法或缺失时返回 1。
         /// </summary>
         private static int ParseUnitId (string protocolSettingsJson) {
-            int v = ProtocolSettingsJson.GetInt(protocolSettingsJson, "unitId", 1);
+            int v = ExtraSettingsJsonHelper.GetInt(protocolSettingsJson, "unitId", 1);
             if (v < 0) return 0;
             if (v > 255) return 255;
             return v;

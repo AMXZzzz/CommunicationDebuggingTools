@@ -52,12 +52,6 @@ namespace Plugin.Panasonic {
             set => _timeoutMs = value < 500 ? 500 : value;
         }
 
-        public void ApplySettingsJson (string json) {
-            Station = ProtocolSettingsJson.GetInt(json, "station", 1);
-            if (Station < 0) Station = 0;
-            if (Station > 99) Station = 99;
-        }
-
         public async Task ConnectAsync (string ip, int port, int timeoutMs, CancellationToken ct) {
             Disconnect();
             if (string.IsNullOrWhiteSpace(ip))

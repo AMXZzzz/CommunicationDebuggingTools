@@ -3,7 +3,7 @@
 namespace CommunicationDebuggingTools.Core.Models {
 
     /// <summary>
-    /// 建立协议会话时的「共性连接上下文」。
+    /// 建立协议会话时的「连接上下文」。
     /// <para>
     /// 设计约定（架构红线）：
     /// 1. UI / Business 只负责填充字段，不解释字段在某一协议下的含义；
