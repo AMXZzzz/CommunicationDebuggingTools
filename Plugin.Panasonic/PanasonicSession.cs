@@ -166,20 +166,20 @@ namespace Plugin.Panasonic {
         }
 
         /// <summary>
-        /// 数据区地址：常见 WD/RD 使用 D + 5 位（DT200 → D00200）。
-        /// WR 使用 W + 5 位（按设备文档可再调）。
+        /// 数据区地址组帧。
+        /// 本测试从站（MEWTOCOL Slave）按 4 位十进制解析：DT100 → D0100。
+        /// （部分实机文档为 5 位 D00100；若实机不通可再做成可配置。）
         /// </summary>
         public static string FormatDataAddr (PanasonicAddress addr) {
             switch (addr.Area) {
                 case PanasonicArea.DT:
-                    return "D" + addr.Index.ToString("D5");
+                    return "D" + addr.Index.ToString("D4"); // DT100 → D0100
                 case PanasonicArea.WR:
-                    return "W" + addr.Index.ToString("D5");
+                    return "W" + addr.Index.ToString("D4"); // WR0 → W0000
                 default:
                     throw new ArgumentException("非数据区: " + addr.Area);
             }
         }
-
         // -------------------- 解析（原有） --------------------
 
         public static PanasonicAddress ParseAddress (string address) {
