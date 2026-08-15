@@ -12,7 +12,7 @@ namespace Plugin.Panasonic {
     /// 松下 MEWTOCOL-COM 协议插件。
     /// 地址 / 站号 / 报文只在本插件与 Session 内处理；UI/Business 不解析。
     /// </summary>
-    public sealed class PanasonicProtocol : IProtocol, IDisposable {
+    public sealed class PanasonicProtocol : IProtocol {
 
         private readonly PanasonicSession _session = new PanasonicSession();
         private bool _disposed;

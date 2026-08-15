@@ -1,45 +1,40 @@
-﻿using CommunicationDebuggingTools.Core.Enums;
-using CommunicationDebuggingTools.Core.Logging;
-using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Services;
+﻿using CommunicationDebuggingTools.Services;
 using System;
 using System.Windows;
 using System.Windows.Threading;
 
 namespace CommunicationDebuggingTools {
     public partial class App : Application {
-        private DispatcherTimer _heartbeat;
-        public static IAppLogger Logger { get; private set; }
-        protected override void OnStartup (StartupEventArgs e) {
 
+        private DispatcherTimer _heartbeat;
+
+        protected override void OnStartup (StartupEventArgs e) {
             base.OnStartup(e);
 
+            // 必须在 UI 线程初始化，PollingEngine/DeviceService 需要捕获
+            // SynchronizationContext.Current（WPF DispatcherSynchronizationContext）
             MyAppServices.Initialize();
-            Logger = new MemoryAppLogger(500);
-            Logger.Info("App", "服务已初始化");
 
-            // 每 3 秒在 UI 线程上检测各设备是否已断线
-            // 使用 DispatcherTimer 而非 System.Threading.Timer：
-            // 回调天然在 UI 线程执行，无跨线程问题
+            // ── 心跳：每 3 秒检测 TCP 层断线 ──
             _heartbeat = new DispatcherTimer {
                 Interval = TimeSpan.FromSeconds(3)
             };
-
-            //! 匿名方法中使用 MyAppServices.Devices?.CheckConnections()，
-            //而非直接使用 MyAppServices.Devices.CheckConnections()，
-            //是为了避免在 MyAppServices.Devices 为 null 时抛出 NullReferenceException 异常。
-            //通过使用 null 条件运算符（?.），当 MyAppServices.Devices 为 null 时，整个表达式将返回 null，
-            //而不会调用 CheckConnections() 方法，从而避免了异常的发生。
-            _heartbeat.Tick +=          (s, ev) => MyAppServices.Devices?.CheckConnections();
+            _heartbeat.Tick += (s, ev) => MyAppServices.Devices?.CheckConnections();
             _heartbeat.Start();
+
+            // ── 启动变量轮询引擎 ──
+            MyAppServices.Polling?.Start();
+
+            MyAppServices.Logger?.Info("App", "应用已启动");
         }
 
         protected override void OnExit (ExitEventArgs e) {
-            _heartbeat?.Stop();
-            try {
-                MyAppServices.Devices?.DisconnectAll();
-            } catch { }
+            // 按依赖顺序逆向释放
+            try { MyAppServices.Polling?.Stop(); } catch { }
+            try { _heartbeat?.Stop(); } catch { }
+            try { MyAppServices.Devices?.DisconnectAll(); } catch { }
 
+            MyAppServices.Logger?.Info("App", "应用已退出");
             base.OnExit(e);
         }
     }

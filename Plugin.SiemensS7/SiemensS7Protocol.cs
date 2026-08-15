@@ -24,7 +24,7 @@ namespace Plugin.SiemensS7 {
     ///   Float             → Real (0x08)  4 字节 IEEE-754 大端
     ///   Double            → 2×DWord      8 字节大端
     /// </summary>
-    public sealed class SiemensS7Protocol : IProtocol, IProtocolDataAccess, IDisposable {
+    public sealed class SiemensS7Protocol : IProtocol {
 
         private readonly SiemensS7Session _session = new SiemensS7Session();
         private bool _disposed;

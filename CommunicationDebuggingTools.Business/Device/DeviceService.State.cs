@@ -79,10 +79,14 @@ namespace CommunicationDebuggingTools.Business.Device {
             return d;
         }
 
+        /// <summary>
+        /// 安全释放协议实例：先断开会话，再 Dispose 托管资源。
+        /// IProtocol : IDisposable，直接调 Dispose（实现内部会先 Disconnect）。
+        /// </summary>
         private static void SafeDisconnectProtocol (IProtocol protocol) {
             if (protocol == null)
                 return;
-            try { protocol.Disconnect(); } catch { }
+            try { protocol.Dispose(); } catch { }
         }
     }
 }

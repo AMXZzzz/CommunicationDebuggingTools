@@ -14,9 +14,8 @@ namespace CommunicationDebuggingTools.Services {
         public static IDeviceService Devices { get; private set; }
         public static IProtocolResolver Protocols { get; private set; }
         public static IVariableService Variables { get; private set; }
+        public static IPollingEngine Polling { get; private set; }
         public static IAppLogger Logger { get; private set; }
-
-
 
         public static void Initialize () {
             if (Devices != null) return;
@@ -27,16 +26,17 @@ namespace CommunicationDebuggingTools.Services {
             Logger.Info("App", "服务初始化开始");
 
             Protocols = CreateProtocolResolver(baseDir);
-            Devices = CreateDeviceService(baseDir, Protocols, Logger);
+            Devices = CreateDeviceService(baseDir, Protocols);
             Variables = CreateVariableService(baseDir, Devices);
+            Polling = new PollingEngine(Variables, Devices, Logger);  // 在 UI 线程构造
 
             Logger.Info("App", "服务初始化完成");
         }
 
         private static IDeviceService CreateDeviceService (
-            string baseDir, IProtocolResolver resolver, IAppLogger logger) {
+            string baseDir, IProtocolResolver resolver) {
             string configPath = Path.Combine(baseDir, "config", "devices.json");
-            var service = new DeviceService(resolver, new JsonDeviceRepository(configPath), logger);
+            var service = new DeviceService(resolver, new JsonDeviceRepository(configPath), Logger);
             service.Load();
             return service;
         }
@@ -48,15 +48,12 @@ namespace CommunicationDebuggingTools.Services {
 
             var names = resolver.GetProtocolNames();
             int n = names != null ? names.Count : 0;
-            if (Logger != null)
-                Logger.Info("Protocol", "已加载协议 " + n + " 个，目录=" + pluginDir);
-
+            Logger.Info("Protocol", "已加载协议 " + n + " 个，目录=" + pluginDir);
             return resolver;
         }
 
         private static IVariableService CreateVariableService (
-            string baseDir,
-            IDeviceService devices) {
+            string baseDir, IDeviceService devices) {
             string path = Path.Combine(baseDir, "config", "variables.json");
             var service = new VariableService(devices, new JsonVariableRepository(path), Logger);
             service.Load();

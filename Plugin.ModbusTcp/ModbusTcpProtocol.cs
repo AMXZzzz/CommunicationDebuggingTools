@@ -11,7 +11,7 @@ namespace Plugin.ModbusTcp {
     /// Modbus TCP 插件入口：实现会话契约与共性报文读写。
     /// 底层 TCP/功能码见 <see cref="ModbusTcpSession"/>；地址与站号仅在本插件内解析。
     /// </summary>
-    public sealed class ModbusTcpProtocol : IProtocol, IProtocolDataAccess, IDisposable {
+    public sealed class ModbusTcpProtocol : IProtocol {
         private readonly ModbusTcpSession _session = new ModbusTcpSession();
         private bool _disposed;
 

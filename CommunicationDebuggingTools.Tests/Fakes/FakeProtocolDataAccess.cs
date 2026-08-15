@@ -6,7 +6,7 @@ using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Tests.Fakes {
     /// <summary>协议桩：会话 + 可配置读写结果。</summary>
-    public class FakeProtocol : IProtocol, IProtocolDataAccess {
+    public class FakeProtocol : IProtocol {
         public bool ConnectResult { get; set; } = true;
         public int ConnectCallCount { get; private set; }
         public ProtocolConnectionContext LastContext { get; private set; }
@@ -51,6 +51,13 @@ namespace CommunicationDebuggingTools.Tests.Fakes {
         }
 
         public void Disconnect () => IsConnected = false;
+
+        private bool _disposed;
+        public void Dispose () {
+            if (_disposed) return;
+            _disposed = true;
+            Disconnect();
+        }
 
         public Task<ProtocolDataMessage> ReadAsync (
             ProtocolDataMessage request,
