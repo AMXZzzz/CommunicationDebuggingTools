@@ -1,21 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.ViewModels;
 using CommunicationDebuggingTools.Views.Controls;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage {
     /// <summary>
-    /// 变量配置页：组装 Controls；遮罩 + Visibility 调度编辑 / 批量 / 导入 / 导出 / 主题消息框。
-    /// 服务通过构造函数注入，再赋值给 XAML 实例化的子控件（属性注入）。
+    /// 变量配置页：只负责弹层 Visibility、子控件服务注入与事件路由。
+    /// 业务（CRUD / 写入）全部在 <see cref="VariablePageViewModel"/>。
     /// </summary>
     public partial class VariableConfigPage : Page {
         private enum MsgPending {
@@ -23,48 +20,47 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             ImportClear
         }
 
-        private readonly IVariableService _variables;
-        private readonly IDeviceService _devices;
-
-        private string _selectedDeviceId;
+        private readonly VariablePageViewModel _vm;
         private string _lastExportPath;
         private MsgPending _msgPending;
 
-        /// <summary>
-        /// DI 构造：由 App 容器以 Transient 创建本页时注入。
-        /// </summary>
-        public VariableConfigPage (IVariableService variables, IDeviceService devices) {
-            _variables = variables ?? throw new ArgumentNullException(nameof(variables));
-            _devices = devices ?? throw new ArgumentNullException(nameof(devices));
+        public VariableConfigPage (VariablePageViewModel viewModel) {
+            _vm = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
 
             InitializeComponent();
+            DataContext = _vm;
+
             InjectServicesIntoControls();
+            WireViewModel();
             WireEvents();
             deviceList.Reload();
         }
 
-        /// <summary>
-        /// XAML 实例化的子控件无法构造注入，由页面统一赋值。
-        /// </summary>
+        /// <summary>XAML 子控件属性注入（服务来自 ViewModel）。</summary>
         private void InjectServicesIntoControls () {
             if (variableTable != null)
-                variableTable.VariableService = _variables;
+                variableTable.VariableService = _vm.VariableService;
 
             if (deviceList != null) {
-                deviceList.DeviceService = _devices;
-                deviceList.VariableService = _variables;
+                deviceList.DeviceService = _vm.DeviceService;
+                deviceList.VariableService = _vm.VariableService;
             }
 
             if (deviceHeader != null)
-                deviceHeader.DeviceService = _devices;
+                deviceHeader.DeviceService = _vm.DeviceService;
 
             if (exportPanel != null)
-                exportPanel.VariableService = _variables;
+                exportPanel.VariableService = _vm.VariableService;
 
             if (importPanel != null) {
-                importPanel.VariableService = _variables;
-                importPanel.DeviceService = _devices;
+                importPanel.VariableService = _vm.VariableService;
+                importPanel.DeviceService = _vm.DeviceService;
             }
+        }
+
+        private void WireViewModel () {
+            _vm.RequestRefresh += RefreshList;
+            _vm.RequestShowInfo += (title, msg) => ShowInfo(title, msg);
         }
 
         private void WireEvents () {
@@ -85,7 +81,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 editPanel.CloseRequested += CloseEdit;
                 editPanel.SaveRequested += SaveEdit;
                 editPanel.DeleteRequested += DeleteEdit;
-                batchPanel.InfoRequested += OnPanelInfo;
+                editPanel.InfoRequested += OnPanelInfo;
             }
 
             if (batchPanel != null) {
@@ -124,21 +120,27 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             }
         }
 
+        // -------------------- 设备选择 --------------------
+
         private void OnDeviceSelected (string deviceId) {
-            _selectedDeviceId = deviceId;
+            _vm.SelectDevice(deviceId);
             deviceHeader.Show(deviceId);
             variableTable.Load(deviceId);
         }
 
+        // -------------------- 单条编辑 --------------------
+
         private void OpenAdd () {
-            if (!EnsureDeviceSelected() || editPanel == null) return;
+            if (!_vm.EnsureDeviceSelected() || editPanel == null)
+                return;
             editPanel.PrepareNew();
             ShowPanel(editPanel);
         }
 
         public void OpenEdit (VariableItem item) {
-            if (item == null || editPanel == null) return;
-            _selectedDeviceId = item.DeviceId;
+            if (item == null || editPanel == null)
+                return;
+            _vm.SelectDevice(item.DeviceId);
             editPanel.Load(item);
             ShowPanel(editPanel);
         }
@@ -146,57 +148,50 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         private void CloseEdit () => HidePanel(editPanel);
 
         private void SaveEdit () {
-            if (editPanel == null) return;
+            if (editPanel == null)
+                return;
 
             VariableItem built = editPanel.Build();
-            if (built == null) return;
+            if (built == null)
+                return;
 
-            if (string.IsNullOrEmpty(built.DeviceId))
-                built.DeviceId = _selectedDeviceId;
-
-            if (editPanel.IsNew)
-                _variables.Add(built);
-            else
-                _variables.Update(built);
-
+            _vm.SaveVariable(built, editPanel.IsNew);
             CloseEdit();
-            RefreshList();
         }
 
         private void DeleteEdit () {
             if (editPanel == null || editPanel.IsNew || string.IsNullOrEmpty(editPanel.EditingId))
                 return;
 
-            _variables.Remove(editPanel.EditingId);
+            _vm.DeleteVariable(editPanel.EditingId);
             CloseEdit();
-            RefreshList();
         }
 
+        // -------------------- 批量 --------------------
+
         private void OpenBatch () {
-            if (!EnsureDeviceSelected() || batchPanel == null) return;
-            batchPanel.Prepare(GetSelectedDeviceTitle());
+            if (!_vm.EnsureDeviceSelected() || batchPanel == null)
+                return;
+            batchPanel.Prepare(_vm.GetSelectedDeviceTitle());
             ShowPanel(batchPanel);
         }
 
         private void CloseBatch () => HidePanel(batchPanel);
 
         private void SaveBatch (IList<VariableItem> items) {
-            if (items == null || string.IsNullOrEmpty(_selectedDeviceId))
-                return;
-
-            foreach (VariableItem v in items) {
-                if (v == null) continue;
-                v.DeviceId = _selectedDeviceId;
-                _variables.Add(v);
-            }
-
+            _vm.SaveBatch(items);
             CloseBatch();
-            RefreshList();
         }
 
+        // -------------------- 导入 / 导出 --------------------
+
         private void OpenExport () {
-            if (exportPanel == null) return;
-            exportPanel.Prepare(_selectedDeviceId, GetSelectedDeviceTitle(), CountCurrentVariables());
+            if (exportPanel == null)
+                return;
+            exportPanel.Prepare(
+                _vm.SelectedDeviceId,
+                _vm.GetSelectedDeviceTitle(),
+                _vm.CountCurrentVariables());
             ShowPanel(exportPanel);
         }
 
@@ -208,7 +203,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private void ShowExportSuccess (string path, int count) {
-            if (msgDialog == null) return;
+            if (msgDialog == null)
+                return;
             _lastExportPath = path;
             _msgPending = MsgPending.None;
             msgDialog.Setup(
@@ -224,15 +220,17 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
         }
 
         private void OpenImport () {
-            if (importPanel == null) return;
-            importPanel.Prepare(_selectedDeviceId, GetSelectedDeviceTitle());
+            if (importPanel == null)
+                return;
+            importPanel.Prepare(_vm.SelectedDeviceId, _vm.GetSelectedDeviceTitle());
             ShowPanel(importPanel);
         }
 
         private void CloseImport () => HidePanel(importPanel);
 
         private void OnImportConfirmClear (string title, string detail) {
-            if (msgDialog == null) return;
+            if (msgDialog == null)
+                return;
             _msgPending = MsgPending.ImportClear;
             msgDialog.Setup(
                 AppMessageKind.Warning,
@@ -247,7 +245,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
 
         private void OnImportSucceeded (int count) {
             RefreshList();
-            if (msgDialog == null) return;
+            if (msgDialog == null)
+                return;
             _msgPending = MsgPending.None;
             msgDialog.Setup(
                 AppMessageKind.Success,
@@ -294,161 +293,36 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             }
         }
 
+        // -------------------- 写入 --------------------
+
         private async void OnVariableWriteRequested (string variableId, string writeText) {
-            if (string.IsNullOrWhiteSpace(variableId))
-                return;
-
-            VariableItem variable = _variables.Variables
-                .FirstOrDefault(v => v != null && v.Id == variableId);
-
-            if (variable == null) {
-                ShowInfo("写入失败", "变量不存在");
-                return;
-            }
-
-            if (!TryParseWriteValue(variable.DataType, writeText, out object value, out string parseError)) {
-                ShowInfo("写入失败", parseError);
-                return;
-            }
-
-            bool ok;
-            try {
-                ok = await _variables.WriteAsync(variableId, value, CancellationToken.None);
-            } catch (ArgumentException ex) {
-                ShowInfo("写入失败", ex.Message);
-                return;
-            } catch (InvalidOperationException ex) {
-                ShowInfo("写入失败", ex.Message);
-                return;
-            }
-
-            if (!ok) {
-                string error = string.IsNullOrWhiteSpace(variable.LastError)
-                    ? "写入未成功"
-                    : variable.LastError;
-                ShowInfo("写入失败", error);
-            }
-
-            RefreshList();
+            await _vm.WriteVariableAsync(variableId, writeText);
         }
 
-        private static bool TryParseWriteValue (
-            Core.Enums.VariableDataType dataType,
-            string raw,
-            out object value,
-            out string error) {
-            string text = (raw ?? string.Empty).Trim();
-            value = null;
-            error = null;
-
-            switch (dataType) {
-                case Core.Enums.VariableDataType.Bool:
-                    if (text == "1" || text.Equals("true", StringComparison.OrdinalIgnoreCase)) {
-                        value = true;
-                        return true;
-                    }
-                    if (text == "0" || text.Equals("false", StringComparison.OrdinalIgnoreCase)) {
-                        value = false;
-                        return true;
-                    }
-                    error = "Bool 类型仅支持 true/false 或 1/0";
-                    return false;
-
-                case Core.Enums.VariableDataType.Int16:
-                    if (short.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out short i16)) {
-                        value = i16;
-                        return true;
-                    }
-                    error = "Int16 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.UInt16:
-                    if (ushort.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort u16)) {
-                        value = u16;
-                        return true;
-                    }
-                    error = "UInt16 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.Int32:
-                    if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i32)) {
-                        value = i32;
-                        return true;
-                    }
-                    error = "Int32 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.UInt32:
-                    if (uint.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint u32)) {
-                        value = u32;
-                        return true;
-                    }
-                    error = "UInt32 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.Int64:
-                    if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long i64)) {
-                        value = i64;
-                        return true;
-                    }
-                    error = "Int64 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.UInt64:
-                    if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ulong u64)) {
-                        value = u64;
-                        return true;
-                    }
-                    error = "UInt64 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.Float:
-                    if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands,
-                            CultureInfo.InvariantCulture, out float f)) {
-                        value = f;
-                        return true;
-                    }
-                    error = "Float 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.Double:
-                    if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands,
-                            CultureInfo.InvariantCulture, out double d)) {
-                        value = d;
-                        return true;
-                    }
-                    error = "Double 类型格式不正确";
-                    return false;
-
-                case Core.Enums.VariableDataType.String:
-                    value = text;
-                    return true;
-
-                default:
-                    value = text;
-                    return true;
-            }
-        }
+        // -------------------- 消息 --------------------
 
         private void OnPanelInfo (string title, string message) =>
             ShowInfo(title, message);
 
         private void ShowInfo (string title, string message) {
-            if (msgDialog == null) return;
+            if (msgDialog == null)
+                return;
             _msgPending = MsgPending.None;
             msgDialog.Setup(
                 AppMessageKind.Info,
-                title,
-                message,
+                title ?? "提示",
+                message ?? "",
                 detail: null,
                 primaryText: "确定",
-                secondaryText: null,
                 showSecondary: false);
             ShowPanel(msgDialog);
         }
 
-        private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
+        private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
             CloseAllPanels();
+        }
+
+        // -------------------- 弹层 Visibility --------------------
 
         private void ShowPanel (UIElement panel) {
             HideAllPanels();
@@ -498,33 +372,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
             e != null && e.Visibility == Visibility.Visible;
 
         private void RefreshList () {
-            variableTable.Load(_selectedDeviceId);
+            variableTable.Load(_vm.SelectedDeviceId);
             deviceList.Reload();
-        }
-
-        private int CountCurrentVariables () {
-            if (string.IsNullOrEmpty(_selectedDeviceId))
-                return 0;
-            return _variables.Variables.Count(v => v != null && v.DeviceId == _selectedDeviceId);
-        }
-
-        private bool EnsureDeviceSelected () {
-            if (!string.IsNullOrEmpty(_selectedDeviceId))
-                return true;
-            ShowInfo("提示", "请先选择左侧设备");
-            return false;
-        }
-
-        private string GetSelectedDeviceTitle () {
-            if (string.IsNullOrEmpty(_selectedDeviceId))
-                return "";
-
-            DeviceInfo d = _devices.Devices
-                .FirstOrDefault(x => x != null && x.Id == _selectedDeviceId);
-            if (d == null) return "";
-
-            string name = string.IsNullOrEmpty(d.Name) ? d.Id : d.Name;
-            return string.IsNullOrEmpty(d.Model) ? name : (name + " · " + d.Model);
         }
     }
 }
