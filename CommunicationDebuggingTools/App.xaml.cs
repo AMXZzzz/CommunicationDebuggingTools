@@ -13,6 +13,7 @@ using CommunicationDebuggingTools.Views.Pages.Device;
 using CommunicationDebuggingTools.Views.Pages.Log;
 using CommunicationDebuggingTools.Views.Pages.Monitor;
 using CommunicationDebuggingTools.Views.VariableConfigPage;
+using CommunicationDebuggingTools.Views.Pages.Settings;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools {
@@ -111,6 +112,7 @@ namespace CommunicationDebuggingTools {
             sc.AddTransient<VariableConfigPage>();
             sc.AddTransient<LogPage>();
             sc.AddTransient<DataMonitorPage>();
+            sc.AddTransient<SettingsPage>(); 
 
             // ── 主窗口（Singleton：只有一个）──
             sc.AddSingleton<MainWindow>();

@@ -4,14 +4,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Enums;
-using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Interfaces;
-using Microsoft.Extensions.DependencyInjection;
+using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
-    /// 设备新增/编辑面板。
+    /// 设备新增 / 编辑面板。
     /// 只收集共性字段（含 StationNo）；不拼 unitId/station JSON，不解析协议语义。
+    /// 协议名列表来自属性注入的 <see cref="ProtocolResolver"/>
     /// </summary>
     public partial class DeviceEditPanel : UserControl {
         public event Action CloseRequested;
@@ -20,32 +20,40 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
         private string _editingId;
         private bool _isDual;
+
         /// <summary>编辑时保留原扩展 JSON，一期界面不改。</summary>
         private string _extraSettingsJson = "{}";
+
+        /// <summary>
+        /// 协议解析器（由 DevicePage 赋值）。用于填充协议下拉，不解析地址语义。
+        /// </summary>
+        public IProtocolResolver ProtocolResolver { get; set; }
 
         public DeviceEditPanel () {
             InitializeComponent();
         }
 
-        public bool IsNew {
-            get { return string.IsNullOrEmpty(_editingId); }
-        }
+        public bool IsNew => string.IsNullOrEmpty(_editingId);
 
         private void LoadProtocolList () {
             if (cmbProtocol == null)
                 return;
+
             cmbProtocol.Items.Clear();
-            IProtocolResolver resolver = CommunicationDebuggingTools.App.Services
-                    ?.GetService<IProtocolResolver>();
-            if (resolver == null) return;
-            IList<string> names = resolver.GetProtocolNames();
+
+            if (ProtocolResolver == null)
+                return;
+
+            IList<string> names = ProtocolResolver.GetProtocolNames();
             if (names == null)
                 return;
+
             foreach (string name in names) {
                 if (string.IsNullOrWhiteSpace(name))
                     continue;
                 cmbProtocol.Items.Add(new ComboBoxItem { Content = name });
             }
+
             if (cmbProtocol.Items.Count > 0)
                 cmbProtocol.SelectedIndex = 0;
         }
@@ -72,6 +80,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 txtIp.Text = info.Ip ?? "";
             if (txtPort != null)
                 txtPort.Text = info.Port.ToString();
+
             // 站号：只绑 StationNo（控件名可为 txtUnitId，语义是站号）
             if (txtUnitId != null)
                 txtUnitId.Text = info.StationNo.ToString();
@@ -80,6 +89,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 txtStatus.Text = info.StatusText ?? "离线";
                 ApplyStatusColor(info.StatusType);
             }
+
             UpdateLaneButtons();
         }
 
@@ -115,12 +125,14 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 d.IsConnected = false;
                 d.StatusType = DeviceStatusType.Offline;
             }
+
             return d;
         }
 
         private void ApplyStatusColor (DeviceStatusType type) {
             if (txtStatus == null)
                 return;
+
             string key = "SF.Brush.Text.Secondary";
             switch (type) {
                 case DeviceStatusType.Success:
@@ -134,6 +146,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                     key = "SF.Brush.Status.Error";
                     break;
             }
+
             try {
                 txtStatus.Foreground = (System.Windows.Media.Brush)FindResource(key);
             } catch { }
@@ -142,16 +155,19 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void SelectProtocol (string protocol) {
             if (cmbProtocol == null || string.IsNullOrWhiteSpace(protocol))
                 return;
+
             for (int i = 0; i < cmbProtocol.Items.Count; i++) {
                 ComboBoxItem item = cmbProtocol.Items[i] as ComboBoxItem;
                 string text = item != null && item.Content != null
                     ? item.Content.ToString()
                     : (cmbProtocol.Items[i] != null ? cmbProtocol.Items[i].ToString() : "");
+
                 if (string.Equals(text, protocol, StringComparison.OrdinalIgnoreCase)) {
                     cmbProtocol.SelectedIndex = i;
                     return;
                 }
             }
+
             if (cmbProtocol.Items.Count > 0)
                 cmbProtocol.SelectedIndex = 0;
         }
@@ -159,9 +175,11 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private string GetSelectedProtocol () {
             if (cmbProtocol == null || cmbProtocol.SelectedItem == null)
                 return "";
+
             ComboBoxItem item = cmbProtocol.SelectedItem as ComboBoxItem;
             if (item != null && item.Content != null)
                 return item.Content.ToString();
+
             string s = cmbProtocol.SelectedItem as string;
             return string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
         }
@@ -169,6 +187,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void UpdateLaneButtons () {
             if (btnLaneSingle == null || btnLaneDual == null)
                 return;
+
             if (_isDual) {
                 btnLaneDual.Style = (Style)FindResource("SF.Style.PrimaryButton");
                 btnLaneSingle.Style = (Style)FindResource("SF.Style.DarkButton");

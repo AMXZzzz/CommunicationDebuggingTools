@@ -15,7 +15,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
     /// 导入变量弹层（一期 JSON）。
     /// 清空确认 / 成功提示由页面通过事件用 AppMessageDialog 展示。
-    /// 服务由页面注入 <see cref="VariableService"/> / <see cref="DeviceService"/>，禁止 Svc。
+    /// 服务由页面注入 <see cref="VariableService"/> / <see cref="DeviceService"/>
     /// </summary>
     public partial class VariableImportPanel : UserControl {
         /// <summary>由页面注入。</summary>

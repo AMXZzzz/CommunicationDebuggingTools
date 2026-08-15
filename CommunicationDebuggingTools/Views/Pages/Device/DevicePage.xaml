@@ -5,6 +5,7 @@
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
       xmlns:device="clr-namespace:CommunicationDebuggingTools.Views.Pages.Device"
       xmlns:models="clr-namespace:CommunicationDebuggingTools.Core.Models;assembly=CommunicationDebuggingTools.Core"
+      xmlns:controls="clr-namespace:CommunicationDebuggingTools.Views.Controls"
       Background="{StaticResource SF.Brush.Bg.App}"
       Title="DevicePage">
 
@@ -61,17 +62,25 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- 遮罩 + 编辑面板（盖住全部行） -->
+        <!-- 遮罩 + 编辑面板 / 主题消息框 -->
         <Border x:Name="editOverlay"
                 Grid.Row="0" Grid.RowSpan="3"
-                Background="#99000000"
+                Background="{StaticResource SF.Brush.Overlay}"
                 Visibility="Collapsed"
                 MouseLeftButtonDown="EditOverlay_MouseLeftButtonDown">
-            <device:DeviceEditPanel x:Name="editPanel"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"
-                                   MouseLeftButtonDown="Panel_MouseLeftButtonDown"/>
+            <Grid>
+                <device:DeviceEditPanel x:Name="editPanel"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed"
+                                       MouseLeftButtonDown="Panel_MouseLeftButtonDown"/>
+
+                <controls:AppMessageDialog x:Name="msgDialog"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Visibility="Collapsed"
+                                           MouseLeftButtonDown="Panel_MouseLeftButtonDown"/>
+            </Grid>
         </Border>
     </Grid>
 </Page>

@@ -16,7 +16,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// 多选时通过 <see cref="SetSelectionMode"/> 显示隐藏 CheckBox。
     /// <para>
     /// 服务：由父页 <c>DevicePage</c> 通过属性注入 <see cref="DeviceService"/>，
-    /// 不再使用 Svc&lt;T&gt; 服务定位器。
     /// </para>
     /// </summary>
     public partial class DeviceCard : UserControl {

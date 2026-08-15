@@ -11,7 +11,7 @@ namespace CommunicationDebuggingTools.Views.Controls {
         Danger
     }
 
-    /// <summary>主题化消息/确认弹层（替代 MessageBox）。</summary>
+    /// <summary>主题化消息/确认弹层（。</summary>
     public partial class AppMessageDialog : UserControl {
         public event Action CloseRequested;
         public event Action PrimaryRequested;

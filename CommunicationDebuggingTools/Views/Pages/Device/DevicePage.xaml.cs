@@ -6,24 +6,30 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.ViewModels;
+using CommunicationDebuggingTools.Views.Controls;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
 
     /// <summary>
     /// 设备管理页：UI 路由；业务在 <see cref="DevicePageViewModel"/>。
-    /// DataTemplate 生成的 DeviceCard 无法构造注入，由本页在可视树就绪后赋 DeviceService。
+    /// DataTemplate 生成的 DeviceCard 在可视树就绪后注入 DeviceService。
+    /// 提示使用 <see cref="AppMessageDialog"/>，与变量配置页一致。
     /// </summary>
     public partial class DevicePage : Page {
 
         private readonly DevicePageViewModel _vm;
+        private readonly IProtocolResolver _protocols;
 
-        public DevicePage (DevicePageViewModel vm) {
+        public DevicePage (DevicePageViewModel vm, IProtocolResolver protocols) {
             if (vm == null)
                 throw new ArgumentNullException(nameof(vm));
 
             _vm = vm;
+            _protocols = protocols;
+
             InitializeComponent();
 
             DataContext = _vm;
@@ -32,14 +38,13 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             WireViewModel();
             WireToolbar();
             WireEditPanel();
+            WireMessageDialog();
 
             if (toolBar != null)
                 toolBar.SetCount(_vm.DeviceCount);
 
-            // 列表增删后卡片重建 → 延后到布局完成再注入
             _vm.DisplayList.CollectionChanged += DisplayList_CollectionChanged;
             Loaded += (_, __) => InjectServicesToCards();
-
             Unloaded += DevicePage_Unloaded;
         }
 
@@ -49,9 +54,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 DispatcherPriority.Loaded);
         }
 
-        /// <summary>
-        /// 给当前可视树中的所有 DeviceCard 注入 IDeviceService，并同步多选模式。
-        /// </summary>
+        /// <summary>给当前可视树中的 DeviceCard 注入服务并同步多选。</summary>
         private void InjectServicesToCards () {
             if (deviceList == null || _vm == null)
                 return;
@@ -65,8 +68,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void WireViewModel () {
             _vm.RequestOpenAdd += () => ShowEditPanel(true, null);
             _vm.RequestOpenEdit += info => ShowEditPanel(false, info);
-            _vm.RequestShowError += msg =>
-                MessageBox.Show(msg ?? "", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _vm.RequestShowError += msg => ShowWarning("提示", msg ?? "");
 
             _vm.PropertyChanged += (s, e) => {
                 if (e.PropertyName == nameof(DevicePageViewModel.DeviceCount) && toolBar != null)
@@ -114,6 +116,8 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void WireEditPanel () {
             if (editPanel == null) return;
 
+            editPanel.ProtocolResolver = _protocols;
+
             editPanel.CloseRequested += CloseEditPanel;
             editPanel.SaveRequested += () => {
                 DeviceInfo info = editPanel.BuildDeviceInfo();
@@ -130,12 +134,23 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             };
         }
 
+        private void WireMessageDialog () {
+            if (msgDialog == null) return;
+            msgDialog.CloseRequested += CloseMessageDialog;
+            msgDialog.PrimaryRequested += CloseMessageDialog;
+            msgDialog.SecondaryRequested += CloseMessageDialog;
+        }
+
+        // ── 编辑面板 ──────────────────────────────────
+
         public void OpenAddDevice () => _vm.OpenAdd();
 
         public void OpenEditDevice (DeviceInfo info) => _vm.OpenEdit(info);
 
         private void ShowEditPanel (bool isNew, DeviceInfo info) {
             if (editPanel == null || editOverlay == null) return;
+
+            HideMessageDialogOnly();
 
             if (isNew)
                 editPanel.LoadData(new DeviceInfo(), true);
@@ -149,21 +164,75 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void CloseEditPanel () {
             if (editPanel != null)
                 editPanel.Visibility = Visibility.Collapsed;
-            if (editOverlay != null)
+            HideOverlayIfIdle();
+        }
+
+        // ── 主题消息框────────────────
+
+        private void ShowWarning (string title, string message) {
+            ShowMessage(AppMessageKind.Warning, title, message);
+        }
+
+        private void ShowInfo (string title, string message) {
+            ShowMessage(AppMessageKind.Info, title, message);
+        }
+
+        private void ShowMessage (AppMessageKind kind, string title, string message) {
+            if (msgDialog == null || editOverlay == null) return;
+
+            // 与变量页一致：先收起其它面板，再显示消息
+            if (editPanel != null)
+                editPanel.Visibility = Visibility.Collapsed;
+
+            msgDialog.Setup(
+                kind,
+                title,
+                message,
+                detail: null,
+                primaryText: "确定",
+                secondaryText: null,
+                showSecondary: false);
+
+            msgDialog.Visibility = Visibility.Visible;
+            editOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void CloseMessageDialog () {
+            HideMessageDialogOnly();
+            HideOverlayIfIdle();
+        }
+
+        private void HideMessageDialogOnly () {
+            if (msgDialog != null)
+                msgDialog.Visibility = Visibility.Collapsed;
+        }
+
+        private void HideOverlayIfIdle () {
+            bool busy =
+                (editPanel != null && editPanel.Visibility == Visibility.Visible) ||
+                (msgDialog != null && msgDialog.Visibility == Visibility.Visible);
+
+            if (!busy && editOverlay != null)
                 editOverlay.Visibility = Visibility.Collapsed;
         }
 
         private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
-            CloseEditPanel();
+            if (editPanel != null)
+                editPanel.Visibility = Visibility.Collapsed;
+            HideMessageDialogOnly();
+            if (editOverlay != null)
+                editOverlay.Visibility = Visibility.Collapsed;
         }
 
         private void Panel_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
-            e.Handled = true;
+            e.Handled = true; // 点击面板本身不关闭遮罩
         }
+
+        // ── 多选 ──────────────────────────────────────
 
         private void ApplySelectModeToCards (bool selectMode) {
             foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
-                card.DeviceService = _vm.Devices; // 确保已注入
+                card.DeviceService = _vm.Devices;
                 card.SetSelectionMode(selectMode);
             }
         }

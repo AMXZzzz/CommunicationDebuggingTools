@@ -13,8 +13,8 @@ using Microsoft.Win32;
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
     /// 导出变量弹层（一期仅 JSON）。
-    /// 成功后通过 <see cref="ExportSucceeded"/> 通知页面弹主题成功框，不再使用 MessageBox。
-    /// 服务由页面注入 <see cref="VariableService"/>，禁止 Svc。
+    /// 成功后通过 <see cref="ExportSucceeded"/> 通知页面弹主题成功框
+    /// 服务由页面注入 <see cref="VariableService"/>
     /// </summary>
     public partial class VariableExportPanel : UserControl {
         /// <summary>由页面注入。</summary>
