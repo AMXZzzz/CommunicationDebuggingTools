@@ -10,10 +10,16 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
-    /// <summary>批量添加变量弹层（对齐 var_batch_add_dialog）。</summary>
+    /// <summary>
+    /// 批量添加变量弹层。
+    /// 校验失败通过 <see cref="InfoRequested"/> 交给页面
+    /// </summary>
     public partial class VariableBatchAddPanel : UserControl {
         public event Action CloseRequested;
         public event Action<IList<VariableItem>> BatchSaveRequested;
+
+        /// <summary>校验失败等提示：(标题, 正文)。</summary>
+        public event Action<string, string> InfoRequested;
 
         private readonly ObservableCollection<BatchRow> _rows = new ObservableCollection<BatchRow>();
 
@@ -74,15 +80,16 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(addr))
                     continue;
                 if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(addr)) {
-                    MessageBox.Show("第 " + r.Index + " 行：名称和地址需同时填写（或整行留空跳过）",
-                        "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    InfoRequested?.Invoke(
+                        "提示",
+                        "第 " + r.Index + " 行：名称和地址需同时填写（或整行留空跳过）");
                     return;
                 }
                 list.Add(r.ToItem());
             }
 
             if (list.Count == 0) {
-                MessageBox.Show("没有可添加的行", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                InfoRequested?.Invoke("提示", "没有可添加的行");
                 return;
             }
 

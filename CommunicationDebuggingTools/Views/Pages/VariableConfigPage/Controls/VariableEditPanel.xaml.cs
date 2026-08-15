@@ -7,8 +7,8 @@ using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
-    /// 变量添加/编辑弹层（对齐设备编辑弹窗与 var_add_dialog）。
-    /// 通过 Close / Save / Delete 事件将意图交给页面处理。
+    /// 变量添加/编辑弹层。
+    /// 通过 Close / Save / Delete / Info 事件将意图交给页面处理
     /// </summary>
     public partial class VariableEditPanel : UserControl {
         /// <summary>关闭弹层（不保存）。</summary>
@@ -19,6 +19,9 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
         /// <summary>删除当前编辑中的变量（仅编辑模式）。</summary>
         public event Action DeleteRequested;
+
+        /// <summary>校验失败等提示：(标题, 正文)，由页面用 AppMessageDialog 展示。</summary>
+        public event Action<string, string> InfoRequested;
 
         private string _editingId;
         private VariableAccess _access = VariableAccess.ReadOnly;
@@ -92,13 +95,11 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             string name = (txtName.Text ?? "").Trim();
             string address = (txtAddress.Text ?? "").Trim();
             if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(address)) {
-                MessageBox.Show("显示名称和地址不能为空", "提示",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                InfoRequested?.Invoke("提示", "显示名称和地址不能为空");
                 return null;
             }
 
-            var item = new VariableItem
-            {
+            var item = new VariableItem {
                 Name = name,
                 Address = address,
                 Unit = (txtUnit.Text ?? "").Trim(),

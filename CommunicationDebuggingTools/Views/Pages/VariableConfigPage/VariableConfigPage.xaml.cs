@@ -85,11 +85,13 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage {
                 editPanel.CloseRequested += CloseEdit;
                 editPanel.SaveRequested += SaveEdit;
                 editPanel.DeleteRequested += DeleteEdit;
+                batchPanel.InfoRequested += OnPanelInfo;
             }
 
             if (batchPanel != null) {
                 batchPanel.CloseRequested += CloseBatch;
                 batchPanel.BatchSaveRequested += SaveBatch;
+                batchPanel.InfoRequested += OnPanelInfo;
             }
 
             if (exportPanel != null) {
