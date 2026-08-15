@@ -166,20 +166,23 @@ namespace Plugin.Panasonic {
         }
 
         /// <summary>
-        /// 数据区地址组帧。
-        /// 本测试从站（MEWTOCOL Slave）按 4 位十进制解析：DT100 → D0100。
-        /// （部分实机文档为 5 位 D00100；若实机不通可再做成可配置。）
+        /// 数据区范围：区码只出现一次 + 起始4位 + 结束4位。
+        /// 例：DT100 起、2 字 → D01000101
         /// </summary>
-        public static string FormatDataAddr (PanasonicAddress addr) {
+        private static string FormatDataRange (PanasonicAddress addr, int wordCount) {
+            if (wordCount < 1) wordCount = 1;
+            char code;
             switch (addr.Area) {
-                case PanasonicArea.DT:
-                    return "D" + addr.Index.ToString("D4"); // DT100 → D0100
-                case PanasonicArea.WR:
-                    return "W" + addr.Index.ToString("D4"); // WR0 → W0000
+                case PanasonicArea.DT: code = 'D'; break;
+                case PanasonicArea.WR: code = 'W'; break;
                 default:
                     throw new ArgumentException("非数据区: " + addr.Area);
             }
+            int start = addr.Index;
+            int end = addr.Index + wordCount - 1;
+            return code + start.ToString("D4") + end.ToString("D4");
         }
+
         // -------------------- 解析（原有） --------------------
 
         public static PanasonicAddress ParseAddress (string address) {

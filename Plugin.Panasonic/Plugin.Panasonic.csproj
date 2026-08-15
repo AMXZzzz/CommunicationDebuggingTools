@@ -45,6 +45,7 @@
     <Compile Include="PanasonicSession.cs" />
     <Compile Include="PanasonicProtocol.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Tools.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CommunicationDebuggingTools.Core\CommunicationDebuggingTools.Core.csproj">
@@ -53,7 +54,7 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-    <PropertyGroup>
+  <PropertyGroup>
     <PostBuildEvent>
 if not exist "$(SolutionDir)CommunicationDebuggingTools\bin\$(ConfigurationName)\plugins\" mkdir "$(SolutionDir)CommunicationDebuggingTools\bin\$(ConfigurationName)\plugins\"
 xcopy /Y /D "$(TargetPath)" "$(SolutionDir)CommunicationDebuggingTools\bin\$(ConfigurationName)\plugins\"
