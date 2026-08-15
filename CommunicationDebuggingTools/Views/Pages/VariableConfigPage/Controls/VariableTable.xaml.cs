@@ -4,13 +4,23 @@ using System.Windows;
 using System.Windows.Controls;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Services;
+using CommunicationDebuggingTools.Core.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
     /// 变量表：筛选与计数；徽章颜色由 XAML DataTrigger 负责。
     /// </summary>
     public partial class VariableTable : UserControl {
+        /// <summary>
+        /// 从 DI 容器解析服务。
+        /// UserControl 由 XAML 实例化，无法构造注入；此为迁移期过渡方案。
+        /// 全局只有 Singleton，GetRequiredService 成本极低。
+        /// </summary>
+        private static T Svc<T> () where T : class =>
+            CommunicationDebuggingTools.App.Services
+                .GetRequiredService<T>();
+
         public event Action VariablesChanged;
         public event Action<VariableItem> EditRequested;
         public event Action<string, string> WriteRequested;
@@ -50,8 +60,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
         private void BtnDelete_Click (object sender, RoutedEventArgs e) {
             string id = (sender as FrameworkElement)?.Tag as string;
-            if (string.IsNullOrEmpty(id) || MyAppServices.Variables == null) return;
-            MyAppServices.Variables.Remove(id);
+            if (string.IsNullOrEmpty(id) || Svc<IVariableService>() == null) return;
+            Svc<IVariableService>().Remove(id);
             Rebuild();
             VariablesChanged?.Invoke();
         }
@@ -71,7 +81,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             _rows.Clear();
             int all = 0, read = 0, write = 0, status = 0, data = 0;
 
-            if (string.IsNullOrEmpty(_deviceId) || MyAppServices.Variables == null) {
+            if (string.IsNullOrEmpty(_deviceId) || Svc<IVariableService>() == null) {
                 UpdateTabCounts(0, 0, 0, 0, 0);
                 UpdateFooter(0, 0, 0);
                 txtEmpty.Visibility = Visibility.Visible;
@@ -79,7 +89,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             }
 
             int index = 1;
-            foreach (VariableItem v in MyAppServices.Variables.Variables) {
+            foreach (VariableItem v in Svc<IVariableService>().Variables) {
                 if (v == null || v.DeviceId != _deviceId) continue;
 
                 all++;
@@ -126,8 +136,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         }
 
         private static VariableItem FindVariable (string id) {
-            if (string.IsNullOrEmpty(id) || MyAppServices.Variables == null) return null;
-            foreach (VariableItem v in MyAppServices.Variables.Variables)
+            if (string.IsNullOrEmpty(id) || Svc<IVariableService>() == null) return null;
+            foreach (VariableItem v in Svc<IVariableService>().Variables)
                 if (v != null && v.Id == id) return v;
             return null;
         }

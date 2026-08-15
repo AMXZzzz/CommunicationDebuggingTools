@@ -6,7 +6,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Services;
+using CommunicationDebuggingTools.Core.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// <summary>
@@ -16,6 +17,15 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
     /// 多选时通过 <see cref="SetSelectionMode"/> 显示隐藏 CheckBox。
     /// </summary>
     public partial class DeviceCard : UserControl {
+        /// <summary>
+        /// 从 DI 容器解析服务。
+        /// UserControl 由 XAML 实例化，无法构造注入；此为迁移期过渡方案。
+        /// 全局只有 Singleton，GetRequiredService 成本极低。
+        /// </summary>
+        private static T Svc<T> () where T : class =>
+            CommunicationDebuggingTools.App.Services
+                .GetRequiredService<T>();
+
         /// <summary>当前已订阅 PropertyChanged 的设备。</summary>
         private DeviceInfo _subscribed;
 
@@ -212,7 +222,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 return;
 
             if (info.IsConnected || info.StatusType == DeviceStatusType.Connecting) {
-                MyAppServices.Devices.Disconnect(info.Id);
+                Svc<IDeviceService>().Disconnect(info.Id);
                 return;
             }
 
@@ -225,7 +235,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             string id = info.Id;
 
             try {
-                await MyAppServices.Devices.ConnectAsync(id, CancellationToken.None);
+                await Svc<IDeviceService>().ConnectAsync(id, CancellationToken.None);
             } catch {
                 if (Device != null && Device.Id == id) {
                     Device.IsConnected = false;
