@@ -9,7 +9,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Services;
 using CommunicationDebuggingTools.Views.Controls;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage {

@@ -22,7 +22,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Log {
 
             // EntryAdded 从后台线程触发，必须 Dispatcher 调度
             _vm.EntryAdded += OnEntryAdded;
-            Unloaded += (_, __) => _vm.EntryAdded -= OnEntryAdded;
+            Unloaded += (_, __) => {
+                _vm.EntryAdded -= OnEntryAdded;
+                _vm.Detach();
+            };
         }
 
         private void OnEntryAdded (LogEntry entry) {
