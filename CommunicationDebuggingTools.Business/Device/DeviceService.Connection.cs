@@ -1,10 +1,10 @@
 ﻿using System;
-using CommunicationDebuggingTools.Core.Config;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Business.Tools;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
@@ -12,8 +12,14 @@ using CommunicationDebuggingTools.Core.Models;
 namespace CommunicationDebuggingTools.Business.Device {
     /// <summary>
     /// 连接 / 断开 / 心跳 / 通讯计数。
+    /// <para>
+    /// 约定：凡修改 <see cref="DeviceInfo"/>（含 Mark*）必须在 UI 线程执行，
+    /// 否则 WPF 绑定会抛「调用线程无法访问此对象」。
+    /// 异步路径在 ConfigureAwait(false) 之后一律经 <see cref="RunOnUi"/> 回切。
+    /// </para>
     /// </summary>
     public partial class DeviceService {
+
         /// <summary>
         /// 异步连接：端口探测 → 解析插件 → ProtocolConnectionContext → 建会话。
         /// </summary>
@@ -28,14 +34,15 @@ namespace CommunicationDebuggingTools.Business.Device {
             _connectCts[id] = linkedCts;
             CancellationToken ct = linkedCts.Token;
 
-            MarkConnecting(device);
+            // MarkConnecting 可能在 UI 线程调用，也可能在后台；统一走 RunOnUi
+            RunOnUi(() => MarkConnecting(device));
             LogInfo("开始连接: " + device.Name + " " + device.Ip + ":" + device.Port);
 
             IProtocol protocol = null;
             try {
                 if (!await ProbeReachableAsync(device, ct).ConfigureAwait(false)) {
                     LogWarn("端口不可达: " + device.Name + " " + device.Ip + ":" + device.Port);
-                    MarkOffline(device);
+                    RunOnUi(() => MarkOffline(device));
                     return false;
                 }
 
@@ -44,7 +51,7 @@ namespace CommunicationDebuggingTools.Business.Device {
                 protocol = _resolver.Resolve(device.Protocol);
                 if (protocol == null) {
                     LogError("未找到协议插件: " + device.Protocol + " @ " + device.Name);
-                    MarkError(device);
+                    RunOnUi(() => MarkError(device));
                     return false;
                 }
 
@@ -54,30 +61,30 @@ namespace CommunicationDebuggingTools.Business.Device {
 
                 if (ct.IsCancellationRequested) {
                     SafeDisconnectProtocol(protocol);
-                    MarkOffline(device);
+                    RunOnUi(() => MarkOffline(device));
                     LogInfo("连接已取消: " + device.Name);
                     return false;
                 }
 
                 if (ok) {
                     _sessions[id] = protocol;
-                    MarkConnected(device);
+                    RunOnUi(() => MarkConnected(device));
                     LogInfo("连接成功: " + device.Name + " [" + device.Protocol + "]");
                 } else {
                     SafeDisconnectProtocol(protocol);
-                    MarkError(device);
+                    RunOnUi(() => MarkError(device));
                     LogError("协议握手失败: " + device.Name);
                 }
 
                 return ok;
             } catch (OperationCanceledException) {
                 SafeDisconnectProtocol(protocol);
-                MarkOffline(device);
+                RunOnUi(() => MarkOffline(device));
                 LogInfo("连接取消: " + device.Name);
                 return false;
             } catch (Exception ex) {
                 SafeDisconnectProtocol(protocol);
-                MarkError(device);
+                RunOnUi(() => MarkError(device));
                 LogError("连接异常: " + device.Name + " — " + ex.Message);
                 return false;
             } finally {
@@ -98,7 +105,8 @@ namespace CommunicationDebuggingTools.Business.Device {
 
             DeviceInfo device = Devices.FirstOrDefault(d => d.Id == id);
             if (device != null) {
-                MarkOffline(device);
+                // Disconnect 可能从心跳线程回调进来，必须回 UI
+                RunOnUi(() => MarkOffline(device));
                 LogInfo("已断开: " + device.Name);
             }
         }
@@ -115,8 +123,13 @@ namespace CommunicationDebuggingTools.Business.Device {
             DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
             if (device != null
                 && device.IsConnected
-                && device.StatusType == DeviceStatusType.Error)
-                device.StatusType = DeviceStatusType.Success;
+                && device.StatusType == DeviceStatusType.Error) {
+                // 可能被心跳线程调用；改 StatusType 必须在 UI
+                RunOnUi(() => {
+                    if (device.IsConnected && device.StatusType == DeviceStatusType.Error)
+                        device.StatusType = DeviceStatusType.Success;
+                });
+            }
         }
 
         /// <summary>
@@ -132,12 +145,16 @@ namespace CommunicationDebuggingTools.Business.Device {
                 return;
 
             DeviceInfo device = Devices.FirstOrDefault(d => d.Id == deviceId);
-            if (device != null
-                && device.IsConnected
-                && device.StatusType != DeviceStatusType.Error) {
-                device.StatusType = DeviceStatusType.Error;
-                LogWarn("通讯连续失败达阈值，ALARM: " + device.Name);
-            }
+            if (device == null)
+                return;
+
+            RunOnUi(() => {
+                if (device.IsConnected
+                    && device.StatusType != DeviceStatusType.Error) {
+                    device.StatusType = DeviceStatusType.Error;
+                    LogWarn("通讯连续失败达阈值，ALARM: " + device.Name);
+                }
+            });
         }
 
         /// <summary>
@@ -258,7 +275,8 @@ namespace CommunicationDebuggingTools.Business.Device {
         }
 
         private static Task<bool> ProbeReachableAsync (DeviceInfo device, CancellationToken ct) {
-            return TcpProbe.IsPortOpenAsync(device.Ip, device.Port, AppConfig.TcpProbeTimeoutMs, ct);
+            return TcpProbe.IsPortOpenAsync(
+                device.Ip, device.Port, AppConfig.TcpProbeTimeoutMs, ct);
         }
 
         private void CancelConnect (string id) {

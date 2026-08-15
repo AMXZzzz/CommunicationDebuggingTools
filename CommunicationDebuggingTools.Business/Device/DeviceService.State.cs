@@ -11,13 +11,18 @@ namespace CommunicationDebuggingTools.Business.Device {
     /// </summary>
     public partial class DeviceService {
 
-        /// <summary>加载/刷新后：清连接态；RUN/连接中 → 离线。</summary>
+        /// <summary>
+        /// 加载/刷新后：清连接态与运行时状态。
+        /// 连接结果不能持久化，启动一律视为离线。
+        /// </summary>
         private static void ResetRuntimeState (DeviceInfo d) {
+            if (d == null)
+                return;
+
             d.IsConnected = false;
-            if (d.StatusType == DeviceStatusType.Success
-                || d.StatusType == DeviceStatusType.Connecting)
-                d.StatusType = DeviceStatusType.Offline;
-            // 站号与扩展 JSON 兜底（旧配置缺字段时）
+            // 必须包含 Error / Warning，否则上次 ALARM 会在启动时残留
+            d.StatusType = DeviceStatusType.Offline;
+
             if (d.StationNo < 0)
                 d.StationNo = 1;
             if (string.IsNullOrWhiteSpace(d.ExtraSettingsJson))

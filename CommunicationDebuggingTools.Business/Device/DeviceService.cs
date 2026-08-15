@@ -68,6 +68,19 @@ namespace CommunicationDebuggingTools.Business.Device {
             LogInfo("已加载设备 " + Devices.Count + " 台");
         }
 
+        /// <summary>
+        /// 在 UI 线程执行（更新 DeviceInfo / 触发绑定）。
+        /// 构造时已捕获 _uiContext；无上下文时直接执行。
+        /// </summary>
+        private void RunOnUi (Action action) {
+            if (action == null) return;
+            if (_uiContext == null || ReferenceEquals(SynchronizationContext.Current, _uiContext)) {
+                action();
+                return;
+            }
+            _uiContext.Send(_ => action(), null);
+        }
+
         public void Save () {
             _repository.SaveAll(Devices.ToList());
         }
