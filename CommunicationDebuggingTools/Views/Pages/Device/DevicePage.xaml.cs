@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.ViewModels;
 
@@ -12,6 +13,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
     /// <summary>
     /// 设备管理页：UI 路由；业务在 <see cref="DevicePageViewModel"/>。
+    /// DataTemplate 生成的 DeviceCard 无法构造注入，由本页在可视树就绪后赋 DeviceService。
     /// </summary>
     public partial class DevicePage : Page {
 
@@ -34,7 +36,30 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (toolBar != null)
                 toolBar.SetCount(_vm.DeviceCount);
 
+            // 列表增删后卡片重建 → 延后到布局完成再注入
+            _vm.DisplayList.CollectionChanged += DisplayList_CollectionChanged;
+            Loaded += (_, __) => InjectServicesToCards();
+
             Unloaded += DevicePage_Unloaded;
+        }
+
+        private void DisplayList_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) {
+            Dispatcher.BeginInvoke(
+                new Action(InjectServicesToCards),
+                DispatcherPriority.Loaded);
+        }
+
+        /// <summary>
+        /// 给当前可视树中的所有 DeviceCard 注入 IDeviceService，并同步多选模式。
+        /// </summary>
+        private void InjectServicesToCards () {
+            if (deviceList == null || _vm == null)
+                return;
+
+            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
+                card.DeviceService = _vm.Devices;
+                card.SetSelectionMode(_vm.IsSelectMode);
+            }
         }
 
         private void WireViewModel () {
@@ -46,8 +71,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             _vm.PropertyChanged += (s, e) => {
                 if (e.PropertyName == nameof(DevicePageViewModel.DeviceCount) && toolBar != null)
                     toolBar.SetCount(_vm.DeviceCount);
-                if (e.PropertyName == nameof(DevicePageViewModel.IsSelectMode) && toolBar != null)
+                if (e.PropertyName == nameof(DevicePageViewModel.IsSelectMode) && toolBar != null) {
                     toolBar.SetSelectMode(_vm.IsSelectMode);
+                    ApplySelectModeToCards(_vm.IsSelectMode);
+                }
             };
         }
 
@@ -110,7 +137,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void ShowEditPanel (bool isNew, DeviceInfo info) {
             if (editPanel == null || editOverlay == null) return;
 
-            // 真实 API：LoadData(DeviceInfo, bool isNew)
             if (isNew)
                 editPanel.LoadData(new DeviceInfo(), true);
             else
@@ -136,8 +162,10 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         private void ApplySelectModeToCards (bool selectMode) {
-            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList))
-                card.SetSelectionMode(selectMode); // 注意方法名
+            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
+                card.DeviceService = _vm.Devices; // 确保已注入
+                card.SetSelectionMode(selectMode);
+            }
         }
 
         private List<string> CollectSelectedIds () {
@@ -150,6 +178,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         private void DevicePage_Unloaded (object sender, RoutedEventArgs e) {
+            _vm.DisplayList.CollectionChanged -= DisplayList_CollectionChanged;
         }
 
         private static IEnumerable<T> FindVisualChildren<T> (DependencyObject parent)

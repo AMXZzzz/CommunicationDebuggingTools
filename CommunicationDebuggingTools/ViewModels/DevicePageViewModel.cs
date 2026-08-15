@@ -16,22 +16,22 @@ namespace CommunicationDebuggingTools.ViewModels {
     /// <summary>
     /// 设备管理页 ViewModel。
     /// 绑定到 DevicePage.DataContext；Page 只做 UI 路由（面板显示/隐藏）。
-    ///
-    /// 线程约定：所有公开方法和属性在 UI 线程调用。
-    /// ConnectAllAsync 内部用 await 保持 UI 响应。
     /// </summary>
     public sealed class DevicePageViewModel : ViewModelBase {
 
         private readonly IDeviceService _devices;
-        private readonly IAppLogger     _log;
+        private readonly IAppLogger _log;
 
-        // ── 绑定属性 ──────────────────────────────────
+        /// <summary>
+        /// 供 View 给 DataTemplate 生成的 DeviceCard 属性注入，避免卡片再走服务定位器。
+        /// </summary>
+        public IDeviceService Devices => _devices;
+
         /// <summary>展示列表 = DeviceInfo 列表 + 末尾 AddDeviceMarker。</summary>
         public ObservableCollection<object> DisplayList { get; } =
             new ObservableCollection<object>();
 
         private bool _isSelectMode;
-        /// <summary>是否处于多选删除模式。</summary>
         public bool IsSelectMode {
             get => _isSelectMode;
             set => SetField(ref _isSelectMode, value);
@@ -43,7 +43,6 @@ namespace CommunicationDebuggingTools.ViewModels {
             private set => SetField(ref _deviceCount, value);
         }
 
-        // ── 命令 ──────────────────────────────────────
         public ICommand ConnectAllCommand { get; }
         public ICommand DisconnectAllCommand { get; }
         public ICommand RefreshCommand { get; }
@@ -51,12 +50,10 @@ namespace CommunicationDebuggingTools.ViewModels {
         public ICommand ConfirmDeleteCommand { get; }
         public ICommand CancelSelectCommand { get; }
 
-        // ── 事件（View 订阅，处理面板显示/隐藏等纯 UI 操作）──
-        public event Action                    RequestOpenAdd;
-        public event Action<DeviceInfo>        RequestOpenEdit;
-        public event Action<string>            RequestShowError;
+        public event Action RequestOpenAdd;
+        public event Action<DeviceInfo> RequestOpenEdit;
+        public event Action<string> RequestShowError;
 
-        // ── 构造 ──────────────────────────────────────
         public DevicePageViewModel (IDeviceService devices, IAppLogger logger = null) {
             _devices = devices ?? throw new ArgumentNullException(nameof(devices));
             _log = logger;
@@ -72,7 +69,6 @@ namespace CommunicationDebuggingTools.ViewModels {
             RebuildDisplayList();
         }
 
-        // ── 公开操作（View 调用或通过命令）───────────────
         public void OpenAdd () => RequestOpenAdd?.Invoke();
 
         public void OpenEdit (DeviceInfo info) {
@@ -106,7 +102,6 @@ namespace CommunicationDebuggingTools.ViewModels {
             }
         }
 
-        // ── 内部操作 ──────────────────────────────────
         private async Task ConnectAllAsync () {
             var list = _devices.Devices
                 .Where(d => d != null && !d.IsConnected)
@@ -152,15 +147,9 @@ namespace CommunicationDebuggingTools.ViewModels {
             DisplayList.Clear();
             foreach (DeviceInfo d in _devices.Devices)
                 DisplayList.Add(d);
-            // 与 XAML DataTemplate {x:Type device:AddDeviceMarker} 一致
-            DisplayList.Add(Views.Pages.Device.AddDeviceMarker.Instance);
+            // 使用 Views 命名空间下的占位类型，与 XAML DataTemplate 一致
+            DisplayList.Add(AddDeviceMarker.Instance);
             DeviceCount = _devices.Devices.Count;
         }
-    }
-
-    /// <summary>添加设备卡片占位标记（保留原有类型，不改动）。</summary>
-    internal sealed class AddDeviceMarker {
-        public static readonly AddDeviceMarker Instance = new AddDeviceMarker();
-        private AddDeviceMarker () { }
     }
 }
