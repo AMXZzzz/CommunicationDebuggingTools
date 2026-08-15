@@ -125,13 +125,14 @@ namespace CommunicationDebuggingTools.Tests {
         }
 
         /// <summary>构造带 ProtocolSettingsJson 的测试设备。</summary>
+        /// <summary>构造测试设备（站号走 StationNo）。</summary>
         private static DeviceInfo CreateDevice (string ip, int port) {
             return new DeviceInfo {
                 Name = "T1",
                 Protocol = "Modbus TCP",
                 Ip = ip,
                 Port = port,
-                ProtocolSettingsJson = "{\"unitId\":1}"
+                StationNo = 1
             };
         }
     }

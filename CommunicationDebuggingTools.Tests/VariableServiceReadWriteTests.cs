@@ -38,8 +38,9 @@ namespace CommunicationDebuggingTools.Tests {
                 Protocol = "Modbus TCP",
                 Ip = "127.0.0.1",
                 Port = 502,
-                ProtocolSettingsJson = "{\"unitId\":1}"
+                StationNo = 1
             };
+        };
             _devices.Add(_device);
 
             // 不走 ConnectAsync（避免 TcpProbe）：直接标记已连接并挂上会话
