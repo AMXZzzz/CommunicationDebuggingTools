@@ -9,15 +9,16 @@ using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace Plugin.Panasonic {
-
     /// <summary>
     /// 松下 MEWTOCOL-COM 协议插件。
     /// 地址 / 站号 / 报文只在本插件与 Session 内处理；UI/Business 不解析。
+    /// <para>
+    /// 数据区读写：RD/WD 使用「起始地址 + 结束地址」（均带区码）。
+    /// 例：DT100 读/写 1 字 → …D00100D00100…；Int32 占 2 字则结束为 D00101。
+    /// </para>
     /// </summary>
     [ProtocolName("Panasonic MEWTOCOL")]
-
     public sealed class PanasonicProtocol : IProtocol {
-
         private readonly PanasonicSession _session = new PanasonicSession();
         private bool _disposed;
 
@@ -84,16 +85,25 @@ namespace Plugin.Panasonic {
                     string body = "RCS" + PanasonicSession.FormatContact(addr);
                     string resp = _session.Transact(body);
                     EnsureNoError(resp);
-                    // 成功应答典型：%SS$RC0 / %SS$RC1 等，末位 0/1
                     request.Value = ParseContactValue(resp);
                 } else {
                     int wordCount = WordsNeeded(request.DataType, request.Length);
+                    if (wordCount < 1)
+                        wordCount = 1;
+
+                    // RD + 起始 + 结束（均含区码）
+                    // 例 DT100×1 字 → RDD00100D00100
                     string start = PanasonicSession.FormatDataAddr(addr);
-                    string body = "RD" + start + wordCount.ToString("D4");
+                    string end = PanasonicSession.FormatDataAddr(
+                        WithIndex(addr, addr.Index + wordCount - 1));
+                    string body = "RD" + start + end;
+
                     string resp = _session.Transact(body);
                     EnsureNoError(resp);
                     ushort[] words = ParseDataWords(resp, wordCount);
-                    request.Value = FromWords(words, request.DataType, request.WordOrder, request.ByteOrder, request.Length, request.StringEncoding);
+                    request.Value = FromWords(
+                        words, request.DataType, request.WordOrder, request.ByteOrder,
+                        request.Length, request.StringEncoding);
                 }
 
                 request.Success = true;
@@ -132,12 +142,20 @@ namespace Plugin.Panasonic {
                         request.ByteOrder,
                         request.Length,
                         request.StringEncoding);
+                    if (words == null || words.Length == 0)
+                        throw new Exception("写入字为空");
+
+                    // WD + 起始 + 结束 + 每字 4 位十六进制
+                    // 例 Int32@DT100 写 12 → WDD00100D00101 + 8 位 hex
                     string start = PanasonicSession.FormatDataAddr(addr);
-                    // WD + 起始 + 数据(每字 4 位十六进制)
+                    string end = PanasonicSession.FormatDataAddr(
+                        WithIndex(addr, addr.Index + words.Length - 1));
+
                     var sb = new System.Text.StringBuilder();
-                    sb.Append("WD").Append(start);
+                    sb.Append("WD").Append(start).Append(end);
                     for (int i = 0; i < words.Length; i++)
                         sb.Append(words[i].ToString("X4"));
+
                     string resp = _session.Transact(sb.ToString());
                     EnsureNoError(resp);
                 }
@@ -155,7 +173,16 @@ namespace Plugin.Panasonic {
 
         // -------------------- 应答与编解码 --------------------
 
-        /// <summary>MEWTOCOL 错误应答含 ! 或 !ERR。</summary>
+        /// <summary>复制地址并改字号（计算结束地址）。</summary>
+        private static PanasonicAddress WithIndex (PanasonicAddress addr, int index) {
+            return new PanasonicAddress {
+                Area = addr.Area,
+                Index = index,
+                BitIndex = -1,
+                IsBit = false
+            };
+        }
+
         private static void EnsureNoError (string resp) {
             if (string.IsNullOrEmpty(resp))
                 throw new Exception("空响应");
@@ -168,9 +195,7 @@ namespace Plugin.Panasonic {
             return resp.IndexOf('!') < 0;
         }
 
-        /// <summary>从 RCS 应答中取接点 0/1。</summary>
         private static bool ParseContactValue (string resp) {
-            // 常见：%01$RC1 或 ...RC0
             for (int i = resp.Length - 1; i >= 0; i--) {
                 char c = resp[i];
                 if (c == '0') return false;
@@ -179,12 +204,9 @@ namespace Plugin.Panasonic {
             throw new Exception("无法解析接点值: " + resp);
         }
 
-        /// <summary>从 RD 应答中解析十六进制字。</summary>
         private static ushort[] ParseDataWords (string resp, int wordCount) {
-            // 数据区在 $RD 之后为连续 4 位十六进制
             int idx = resp.IndexOf("$RD", StringComparison.OrdinalIgnoreCase);
             string data = idx >= 0 ? resp.Substring(idx + 3) : resp;
-            // 去掉可能的前缀杂字符，只保留 0-9A-F
             var hex = new System.Text.StringBuilder();
             for (int i = 0; i < data.Length; i++) {
                 char c = data[i];
@@ -196,9 +218,8 @@ namespace Plugin.Panasonic {
                 throw new Exception("数据字不足: " + resp);
 
             ushort[] words = new ushort[wordCount];
-            for (int i = 0; i < wordCount; i++) {
+            for (int i = 0; i < wordCount; i++)
                 words[i] = ushort.Parse(h.Substring(i * 4, 4), NumberStyles.HexNumber);
-            }
             return words;
         }
 
@@ -229,7 +250,6 @@ namespace Plugin.Panasonic {
             ByteOrder byteOrder,
             int length,
             StringEncodingKind encoding) {
-            // 简化：字内按大端拼；多字按 HighWordFirst 时 w[0] 为高字
             switch (dt) {
                 case VariableDataType.Int16:
                     return (short)w[0];
@@ -301,7 +321,6 @@ namespace Plugin.Panasonic {
 
         private static ulong Combine4 (ushort[] w, WordOrder order) {
             if (w == null || w.Length < 4) return 0;
-            // HighWordFirst: w0 最高
             if (order == WordOrder.LowWordFirst)
                 return (ulong)w[0] | ((ulong)w[1] << 16) | ((ulong)w[2] << 32) | ((ulong)w[3] << 48);
             return (ulong)w[3] | ((ulong)w[2] << 16) | ((ulong)w[1] << 32) | ((ulong)w[0] << 48);
@@ -329,9 +348,11 @@ namespace Plugin.Panasonic {
             if (v is bool b) return b;
             if (v == null) return false;
             string s = v.ToString().Trim();
-            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase) || s.Equals("ON", StringComparison.OrdinalIgnoreCase))
+            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("ON", StringComparison.OrdinalIgnoreCase))
                 return true;
-            if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase) || s.Equals("OFF", StringComparison.OrdinalIgnoreCase))
+            if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("OFF", StringComparison.OrdinalIgnoreCase))
                 return false;
             long n;
             return long.TryParse(s, out n) && n != 0;
