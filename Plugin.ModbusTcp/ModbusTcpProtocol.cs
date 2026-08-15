@@ -3,7 +3,6 @@ using CommunicationDebuggingTools.Core.Attributes;
 using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Core.Tools;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -280,16 +279,6 @@ namespace Plugin.ModbusTcp {
             request.Quality = DataQuality.Bad;
             request.ErrorMessage = message ?? "";
             return request;
-        }
-
-        /// <summary>
-        /// 从 ProtocolSettingsJson 解析 unitId；非法或缺失时返回 1。
-        /// </summary>
-        private static int ParseUnitId (string protocolSettingsJson) {
-            int v = ExtraSettingsJsonHelper.GetInt(protocolSettingsJson, "unitId", 1);
-            if (v < 0) return 0;
-            if (v > 255) return 255;
-            return v;
         }
 
         /// <summary>
