@@ -11,14 +11,12 @@ using CommunicationDebuggingTools.ViewModels;
 namespace CommunicationDebuggingTools.Views.Pages.Device {
 
     /// <summary>
-    /// 设备管理页：只负责 UI（列表模板、遮罩弹层、工具栏事件）。
-    /// 业务全部委托 <see cref="DevicePageViewModel"/>（由 DI 注入）。
+    /// 设备管理页：UI 路由；业务在 <see cref="DevicePageViewModel"/>。
     /// </summary>
     public partial class DevicePage : Page {
 
         private readonly DevicePageViewModel _vm;
 
-        /// <summary>DI 构造：App 中注册为 Transient。</summary>
         public DevicePage (DevicePageViewModel vm) {
             if (vm == null)
                 throw new ArgumentNullException(nameof(vm));
@@ -39,15 +37,12 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             Unloaded += DevicePage_Unloaded;
         }
 
-        // -------------------- ViewModel 事件 --------------------
-
         private void WireViewModel () {
-            _vm.RequestOpenAdd += () => ShowEditPanel(isNew: true, null);
-            _vm.RequestOpenEdit += info => ShowEditPanel(isNew: false, info);
+            _vm.RequestOpenAdd += () => ShowEditPanel(true, null);
+            _vm.RequestOpenEdit += info => ShowEditPanel(false, info);
             _vm.RequestShowError += msg =>
                 MessageBox.Show(msg ?? "", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
 
-            // 数量变化：VM 重建列表后同步工具栏
             _vm.PropertyChanged += (s, e) => {
                 if (e.PropertyName == nameof(DevicePageViewModel.DeviceCount) && toolBar != null)
                     toolBar.SetCount(_vm.DeviceCount);
@@ -91,11 +86,11 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
         private void WireEditPanel () {
             if (editPanel == null) return;
+
             editPanel.CloseRequested += CloseEditPanel;
             editPanel.SaveRequested += () => {
                 DeviceInfo info = editPanel.BuildDeviceInfo();
-                bool isNew = editPanel.IsNew;
-                _vm.SaveDevice(info, isNew);
+                _vm.SaveDevice(info, editPanel.IsNew);
                 CloseEditPanel();
             };
             editPanel.DeleteRequested += () => {
@@ -108,23 +103,18 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             };
         }
 
-        // -------------------- 供卡片调用（保持原入口） --------------------
-
-        /// <summary>添加卡点击。</summary>
         public void OpenAddDevice () => _vm.OpenAdd();
 
-        /// <summary>设备卡「编辑」。</summary>
         public void OpenEditDevice (DeviceInfo info) => _vm.OpenEdit(info);
-
-        // -------------------- 弹层 --------------------
 
         private void ShowEditPanel (bool isNew, DeviceInfo info) {
             if (editPanel == null || editOverlay == null) return;
 
+            // 真实 API：LoadData(DeviceInfo, bool isNew)
             if (isNew)
-                editPanel.PrepareNew();
+                editPanel.LoadData(new DeviceInfo(), true);
             else
-                editPanel.Load(info);
+                editPanel.LoadData(info, false);
 
             editPanel.Visibility = Visibility.Visible;
             editOverlay.Visibility = Visibility.Visible;
@@ -138,7 +128,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
-            // 点遮罩关闭；点面板内部不要关（面板需 e.Handled）
             CloseEditPanel();
         }
 
@@ -146,11 +135,9 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             e.Handled = true;
         }
 
-        // -------------------- 多选 --------------------
-
         private void ApplySelectModeToCards (bool selectMode) {
             foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList))
-                card.SetSelectMode(selectMode);
+                card.SetSelectionMode(selectMode); // 注意方法名
         }
 
         private List<string> CollectSelectedIds () {
@@ -163,8 +150,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         }
 
         private void DevicePage_Unloaded (object sender, RoutedEventArgs e) {
-            // 事件挂在 VM / 工具栏上的匿名委托随 Page 回收即可；
-            // 若后续 VM 实现 IDisposable，在此 Dispose。
         }
 
         private static IEnumerable<T> FindVisualChildren<T> (DependencyObject parent)

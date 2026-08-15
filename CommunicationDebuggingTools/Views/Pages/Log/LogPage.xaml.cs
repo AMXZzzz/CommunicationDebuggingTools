@@ -6,9 +6,6 @@ using CommunicationDebuggingTools.ViewModels;
 
 namespace CommunicationDebuggingTools.Views.Pages.Log {
 
-    /// <summary>
-    /// 通讯日志页 code-behind：绑定 VM，将后台 EntryAdded 事件调度到 UI 线程。
-    /// </summary>
     public partial class LogPage : Page {
 
         private readonly LogPageViewModel _vm;
@@ -20,7 +17,6 @@ namespace CommunicationDebuggingTools.Views.Pages.Log {
 
             listLog.ItemsSource = _vm.Entries;
 
-            // EntryAdded 从后台线程触发，必须 Dispatcher 调度
             _vm.EntryAdded += OnEntryAdded;
             Unloaded += (_, __) => {
                 _vm.EntryAdded -= OnEntryAdded;
@@ -34,6 +30,12 @@ namespace CommunicationDebuggingTools.Views.Pages.Log {
                 if (_vm.Entries.Count > 0)
                     listLog.ScrollIntoView(_vm.Entries[_vm.Entries.Count - 1]);
             }));
+        }
+
+        /// <summary>对应 XAML：Click="BtnClear_Click"</summary>
+        private void BtnClear_Click (object sender, RoutedEventArgs e) {
+            if (_vm.ClearCommand != null && _vm.ClearCommand.CanExecute(null))
+                _vm.ClearCommand.Execute(null);
         }
     }
 }

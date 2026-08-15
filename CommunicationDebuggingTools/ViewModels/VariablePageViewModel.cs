@@ -1,212 +1,526 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
-using CommunicationDebuggingTools.Business.Tools;
 using CommunicationDebuggingTools.Core.Interfaces;
-using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Views.Controls;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace CommunicationDebuggingTools.ViewModels {
+namespace CommunicationDebuggingTools.Views.VariableConfigPage {
 
     /// <summary>
-    /// 变量配置页 ViewModel。
-    /// 持有选中设备、编辑状态；Page 只负责面板显示/隐藏。
+    /// 变量配置页：组装 Controls；用遮罩 + Visibility 调度
+    /// 编辑 / 批量 / 导入 / 导出 / 主题消息框。
     /// </summary>
-    public sealed class VariablePageViewModel : ViewModelBase {
+    public partial class VariableConfigPage : Page {
 
-        private readonly IVariableService _variables;
-        private readonly IDeviceService   _devices;
-        private readonly IAppLogger       _log;
+        private enum MsgPending {
+            None,
+            ImportClear
+        }
 
-        // ── 状态 ────────────────────────────────────
         private string _selectedDeviceId;
-        public string SelectedDeviceId {
-            get => _selectedDeviceId;
-            set {
-                if (SetField(ref _selectedDeviceId, value)) {
-                    OnPropertyChanged(nameof(HasDeviceSelected));
-                    OnPropertyChanged(nameof(SelectedDeviceTitle));
-                }
+        private string _lastExportPath;
+        private MsgPending _msgPending;
+
+        /// <summary>从 DI 取服务（过渡写法；后续可改为构造注入 ViewModel）。</summary>
+        private static T Svc<T> () where T : class =>
+            App.Services != null ? App.Services.GetService<T>() : null;
+
+        public VariableConfigPage () {
+            InitializeComponent();
+            WireEvents();
+            deviceList.Reload();
+        }
+
+        private void WireEvents () {
+            deviceList.DeviceSelected += OnDeviceSelected;
+            variableTable.VariablesChanged += () => deviceList.Reload();
+            variableTable.EditRequested += OpenEdit;
+            variableTable.WriteRequested += OnVariableWriteRequested;
+
+            deviceHeader.AddClicked += OpenAdd;
+            deviceHeader.BatchAddClicked += OpenBatch;
+
+            if (toolBar != null) {
+                toolBar.ImportClicked += OpenImport;
+                toolBar.ExportClicked += OpenExport;
+            }
+
+            if (editPanel != null) {
+                editPanel.CloseRequested += CloseEdit;
+                editPanel.SaveRequested += SaveEdit;
+                editPanel.DeleteRequested += DeleteEdit;
+            }
+
+            if (batchPanel != null) {
+                batchPanel.CloseRequested += CloseBatch;
+                batchPanel.BatchSaveRequested += SaveBatch;
+            }
+
+            if (exportPanel != null) {
+                exportPanel.CloseRequested -= CloseExport;
+                exportPanel.ExportSucceeded -= OnExportSucceeded;
+                exportPanel.InfoRequested -= OnPanelInfo;
+
+                exportPanel.CloseRequested += CloseExport;
+                exportPanel.ExportSucceeded += OnExportSucceeded;
+                exportPanel.InfoRequested += OnPanelInfo;
+            }
+
+            if (importPanel != null) {
+                importPanel.CloseRequested -= CloseImport;
+                importPanel.ConfirmClearRequested -= OnImportConfirmClear;
+                importPanel.ImportSucceeded -= OnImportSucceeded;
+                importPanel.InfoRequested -= OnPanelInfo;
+
+                importPanel.CloseRequested += CloseImport;
+                importPanel.ConfirmClearRequested += OnImportConfirmClear;
+                importPanel.ImportSucceeded += OnImportSucceeded;
+                importPanel.InfoRequested += OnPanelInfo;
+            }
+
+            if (msgDialog != null) {
+                msgDialog.CloseRequested -= OnMsgClose;
+                msgDialog.PrimaryRequested -= OnMsgPrimary;
+                msgDialog.SecondaryRequested -= OnMessageSecondary;
+
+                msgDialog.CloseRequested += OnMsgClose;
+                msgDialog.PrimaryRequested += OnMsgPrimary;
+                msgDialog.SecondaryRequested += OnMessageSecondary;
             }
         }
 
-        public bool HasDeviceSelected => !string.IsNullOrEmpty(_selectedDeviceId);
-
-        public string SelectedDeviceTitle {
-            get {
-                if (!HasDeviceSelected) return string.Empty;
-                DeviceInfo d = _devices.Devices
-                    .FirstOrDefault(x => x != null && x.Id == _selectedDeviceId);
-                if (d == null) return string.Empty;
-                string name = string.IsNullOrEmpty(d.Name) ? d.Id : d.Name;
-                return string.IsNullOrEmpty(d.Model) ? name : (name + " · " + d.Model);
-            }
+        private void OnDeviceSelected (string deviceId) {
+            _selectedDeviceId = deviceId;
+            deviceHeader.Show(deviceId);
+            variableTable.Load(deviceId);
         }
 
-        public int CurrentVariableCount =>
-            HasDeviceSelected
-            ? _variables.Variables.Count(v => v != null && v.DeviceId == _selectedDeviceId)
-            : 0;
+        // -------------------- 单条 --------------------
 
-        // ── 事件（View 订阅，处理面板显示/隐藏）────────
-        public event Action             RequestOpenAdd;
-        public event Action<VariableItem> RequestOpenEdit;
-        public event Action             RequestOpenBatch;
-        public event Action             RequestOpenImport;
-        public event Action<string, int>  RequestOpenExport;   // deviceId, count
-        public event Action<string, string> RequestShowInfo;   // title, message
-        public event Action<string, string, string> RequestShowWarning; // title, msg, detail
-
-        // ── 构造 ────────────────────────────────────
-        public VariablePageViewModel (
-            IVariableService variables,
-            IDeviceService devices,
-            IAppLogger logger = null) {
-            _variables = variables ?? throw new ArgumentNullException(nameof(variables));
-            _devices = devices ?? throw new ArgumentNullException(nameof(devices));
-            _log = logger;
-        }
-
-        // ── 设备选择 ─────────────────────────────────
-        public void SelectDevice (string deviceId) {
-            SelectedDeviceId = deviceId;
-        }
-
-        // ── 变量 CRUD ────────────────────────────────
-        public void OpenAdd () {
-            if (!EnsureDevice()) return;
-            RequestOpenAdd?.Invoke();
+        private void OpenAdd () {
+            if (!EnsureDeviceSelected() || editPanel == null) return;
+            editPanel.PrepareNew();
+            ShowPanel(editPanel);
         }
 
         public void OpenEdit (VariableItem item) {
-            if (item == null) return;
-            SelectedDeviceId = item.DeviceId;
-            RequestOpenEdit?.Invoke(item);
+            if (item == null || editPanel == null) return;
+            _selectedDeviceId = item.DeviceId;
+            editPanel.Load(item);
+            ShowPanel(editPanel);
         }
 
-        public void SaveVariable (VariableItem item, bool isNew) {
-            if (item == null) return;
-            if (string.IsNullOrEmpty(item.DeviceId))
-                item.DeviceId = _selectedDeviceId;
-            try {
-                if (isNew) _variables.Add(item);
-                else _variables.Update(item);
-                _log?.Info("Variable", (isNew ? "新增" : "更新") + "变量: " + item.Name);
-            } catch (Exception ex) {
-                RequestShowInfo?.Invoke("保存失败", ex.Message);
-                _log?.Error("Variable", "保存变量失败", ex);
-            }
+        private void CloseEdit () => HidePanel(editPanel);
+
+        private void SaveEdit () {
+            IVariableService vars = Svc<IVariableService>();
+            if (editPanel == null || vars == null) return;
+
+            VariableItem built = editPanel.Build();
+            if (built == null) return;
+
+            if (string.IsNullOrEmpty(built.DeviceId))
+                built.DeviceId = _selectedDeviceId;
+
+            if (editPanel.IsNew)
+                vars.Add(built);
+            else
+                vars.Update(built);
+
+            CloseEdit();
+            RefreshList();
         }
 
-        public void DeleteVariable (string id) {
-            if (string.IsNullOrEmpty(id)) return;
-            try {
-                _variables.Remove(id);
-                _log?.Info("Variable", "删除变量: " + id);
-            } catch (Exception ex) {
-                RequestShowInfo?.Invoke("删除失败", ex.Message);
-                _log?.Error("Variable", "删除变量失败", ex);
-            }
+        private void DeleteEdit () {
+            if (editPanel == null || editPanel.IsNew || string.IsNullOrEmpty(editPanel.EditingId))
+                return;
+
+            IVariableService vars = Svc<IVariableService>();
+            if (vars == null) return;
+
+            vars.Remove(editPanel.EditingId);
+            CloseEdit();
+            RefreshList();
         }
 
-        // ── 批量新增 ─────────────────────────────────
-        public void OpenBatch () {
-            if (!EnsureDevice()) return;
-            RequestOpenBatch?.Invoke();
+        // -------------------- 批量 --------------------
+
+        private void OpenBatch () {
+            if (!EnsureDeviceSelected() || batchPanel == null) return;
+            batchPanel.Prepare(GetSelectedDeviceTitle());
+            ShowPanel(batchPanel);
         }
 
-        public void SaveBatch (IList<VariableItem> items) {
-            if (items == null || string.IsNullOrEmpty(_selectedDeviceId)) return;
+        private void CloseBatch () => HidePanel(batchPanel);
+
+        private void SaveBatch (IList<VariableItem> items) {
+            IVariableService vars = Svc<IVariableService>();
+            if (items == null || vars == null || string.IsNullOrEmpty(_selectedDeviceId))
+                return;
+
             foreach (VariableItem v in items) {
                 if (v == null) continue;
                 v.DeviceId = _selectedDeviceId;
-                try { _variables.Add(v); } catch { }
+                vars.Add(v);
             }
-            _log?.Info("Variable", "批量新增 " + items.Count + " 条变量");
+
+            CloseBatch();
+            RefreshList();
         }
 
-        // ── 导入 / 导出 ──────────────────────────────
-        public void OpenImport () {
-            if (!EnsureDevice()) return;
-            RequestOpenImport?.Invoke();
+        // -------------------- 导出 --------------------
+
+        private void OpenExport () {
+            if (exportPanel == null) return;
+            exportPanel.Prepare(_selectedDeviceId, GetSelectedDeviceTitle(), CountCurrentVariables());
+            ShowPanel(exportPanel);
         }
 
-        public void OpenExport () {
-            RequestOpenExport?.Invoke(_selectedDeviceId, CurrentVariableCount);
+        private void CloseExport () => HidePanel(exportPanel);
+
+        private void OnExportSucceeded (string path, int count) {
+            CloseExport();
+            ShowExportSuccess(path, count);
         }
 
-        public void NotifyImportConfirmClear (string title, string detail) {
-            RequestShowWarning?.Invoke(title, "导入将覆盖当前范围内变量", detail);
+        private void ShowExportSuccess (string path, int count) {
+            if (msgDialog == null) return;
+            _lastExportPath = path;
+            _msgPending = MsgPending.None;
+            msgDialog.Setup(
+                AppMessageKind.Success,
+                "导出完成",
+                "已导出 " + count + " 条变量",
+                path,
+                primaryText: "确定",
+                secondaryText: "打开目录",
+                showSecondary: true,
+                detailAsBox: true);
+            ShowPanel(msgDialog);
         }
 
-        public void NotifyImportSucceeded (int count) {
-            RequestShowInfo?.Invoke("导入完成", "已导入 " + count + " 条变量");
-            _log?.Info("Variable", "导入完成，共 " + count + " 条");
+        // -------------------- 导入 --------------------
+
+        private void OpenImport () {
+            if (importPanel == null) return;
+            importPanel.Prepare(_selectedDeviceId, GetSelectedDeviceTitle());
+            ShowPanel(importPanel);
         }
 
-        public void NotifyExportSucceeded (string path, int count) {
-            _log?.Info("Variable", "导出完成，共 " + count + " 条，路径: " + path);
+        private void CloseImport () => HidePanel(importPanel);
+
+        private void OnImportConfirmClear (string title, string detail) {
+            if (msgDialog == null) return;
+            _msgPending = MsgPending.ImportClear;
+            msgDialog.Setup(
+                AppMessageKind.Warning,
+                title,
+                "导入将覆盖当前范围内变量",
+                detail,
+                primaryText: "继续导入",
+                secondaryText: "取消",
+                showSecondary: true);
+            ShowPanel(msgDialog);
         }
 
-        public void OpenExportFolder (string path) {
-            if (string.IsNullOrEmpty(path)) return;
-            string dir = Path.GetDirectoryName(path);
+        private void OnImportSucceeded (int count) {
+            RefreshList();
+            if (msgDialog == null) return;
+            _msgPending = MsgPending.None;
+            msgDialog.Setup(
+                AppMessageKind.Success,
+                "导入完成",
+                "已导入 " + count + " 条变量",
+                detail: null,
+                primaryText: "确定",
+                showSecondary: false);
+            ShowPanel(msgDialog);
+        }
+
+        // -------------------- 主题消息框 --------------------
+
+        private void OnMsgPrimary () {
+            MsgPending pending = _msgPending;
+            _msgPending = MsgPending.None;
+            HidePanel(msgDialog);
+            if (pending == MsgPending.ImportClear)
+                importPanel?.ExecuteImport();
+        }
+
+        private void OnMsgClose () {
+            _msgPending = MsgPending.None;
+            HidePanel(msgDialog);
+        }
+
+        private void OnMessageSecondary () {
+            if (string.IsNullOrEmpty(_lastExportPath))
+                return;
+
+            string dir = Path.GetDirectoryName(_lastExportPath);
             if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) {
-                RequestShowInfo?.Invoke("提示", "目录不存在或已被删除");
+                ShowInfo("提示", "目录不存在或已被删除");
                 return;
             }
+
             try {
-                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
-            } catch (Exception ex) {
-                RequestShowInfo?.Invoke("打开目录失败", ex.Message);
+                Process.Start(new ProcessStartInfo {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            } catch (InvalidOperationException ex) {
+                ShowInfo("打开目录失败", ex.Message);
+            } catch (System.ComponentModel.Win32Exception ex) {
+                ShowInfo("打开目录失败", ex.Message);
             }
         }
 
-        // ── 写入 ─────────────────────────────────────
-        public async Task WriteVariableAsync (string variableId, string rawText) {
-            if (string.IsNullOrWhiteSpace(variableId)) return;
+        private async void OnVariableWriteRequested (string variableId, string writeText) {
+            IVariableService vars = Svc<IVariableService>();
+            if (string.IsNullOrWhiteSpace(variableId) || vars == null)
+                return;
 
-            VariableItem v = _variables.Variables
-                .FirstOrDefault(x => x != null && x.Id == variableId);
-            if (v == null) {
-                RequestShowInfo?.Invoke("写入失败", "变量不存在");
+            VariableItem variable = vars.Variables
+                .FirstOrDefault(v => v != null && v.Id == variableId);
+            if (variable == null) {
+                ShowInfo("写入失败", "变量不存在");
                 return;
             }
 
-            object value;
-            string parseErr;
-            if (!ValueParser.TryParse(v.DataType, rawText, out value, out parseErr)) {
-                RequestShowInfo?.Invoke("写入失败", parseErr);
+            if (!TryParseWriteValue(variable.DataType, writeText, out object value, out string parseError)) {
+                ShowInfo("写入失败", parseError);
                 return;
             }
 
             bool ok;
             try {
-                ok = await _variables.WriteAsync(variableId, value, CancellationToken.None);
-            } catch (Exception ex) {
-                RequestShowInfo?.Invoke("写入失败", ex.Message);
-                _log?.Error("Variable", "写入变量异常: " + v.Name, ex);
+                ok = await vars.WriteAsync(variableId, value, CancellationToken.None);
+            } catch (ArgumentException ex) {
+                ShowInfo("写入失败", ex.Message);
+                return;
+            } catch (InvalidOperationException ex) {
+                ShowInfo("写入失败", ex.Message);
                 return;
             }
 
             if (!ok) {
-                string err = string.IsNullOrWhiteSpace(v.LastError) ? "写入未成功" : v.LastError;
-                RequestShowInfo?.Invoke("写入失败", err);
-            } else {
-                _log?.Info("Variable", "写入成功: " + v.Name + " = " + rawText);
+                string error = string.IsNullOrWhiteSpace(variable.LastError)
+                    ? "写入未成功"
+                    : variable.LastError;
+                ShowInfo("写入失败", error);
+            }
+
+            RefreshList();
+        }
+
+        private static bool TryParseWriteValue (
+            Core.Enums.VariableDataType dataType,
+            string raw,
+            out object value,
+            out string error) {
+            string text = (raw ?? string.Empty).Trim();
+            value = null;
+            error = null;
+
+            switch (dataType) {
+                case Core.Enums.VariableDataType.Bool:
+                    if (text == "1" || text.Equals("true", StringComparison.OrdinalIgnoreCase)) {
+                        value = true;
+                        return true;
+                    }
+                    if (text == "0" || text.Equals("false", StringComparison.OrdinalIgnoreCase)) {
+                        value = false;
+                        return true;
+                    }
+                    error = "Bool 类型仅支持 true/false 或 1/0";
+                    return false;
+
+                case Core.Enums.VariableDataType.Int16:
+                    if (short.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out short i16)) {
+                        value = i16;
+                        return true;
+                    }
+                    error = "Int16 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.UInt16:
+                    if (ushort.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort u16)) {
+                        value = u16;
+                        return true;
+                    }
+                    error = "UInt16 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Int32:
+                    if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i32)) {
+                        value = i32;
+                        return true;
+                    }
+                    error = "Int32 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.UInt32:
+                    if (uint.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint u32)) {
+                        value = u32;
+                        return true;
+                    }
+                    error = "UInt32 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Int64:
+                    if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long i64)) {
+                        value = i64;
+                        return true;
+                    }
+                    error = "Int64 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.UInt64:
+                    if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ulong u64)) {
+                        value = u64;
+                        return true;
+                    }
+                    error = "UInt64 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Float:
+                    if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands,
+                            CultureInfo.InvariantCulture, out float f)) {
+                        value = f;
+                        return true;
+                    }
+                    error = "Float 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.Double:
+                    if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands,
+                            CultureInfo.InvariantCulture, out double d)) {
+                        value = d;
+                        return true;
+                    }
+                    error = "Double 类型格式不正确";
+                    return false;
+
+                case Core.Enums.VariableDataType.String:
+                    value = text;
+                    return true;
+
+                default:
+                    value = text;
+                    return true;
             }
         }
 
-        // ── 辅助 ─────────────────────────────────────
-        private bool EnsureDevice () {
-            if (HasDeviceSelected) return true;
-            RequestShowInfo?.Invoke("提示", "请先选择左侧设备");
+        private void OnPanelInfo (string title, string message) =>
+            ShowInfo(title, message);
+
+        private void ShowInfo (string title, string message) {
+            if (msgDialog == null) return;
+            _msgPending = MsgPending.None;
+            msgDialog.Setup(
+                AppMessageKind.Info,
+                title,
+                message,
+                detail: null,
+                primaryText: "确定",
+                secondaryText: null,
+                showSecondary: false);
+            ShowPanel(msgDialog);
+        }
+
+        // -------------------- 遮罩 --------------------
+
+        private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
+            CloseAllPanels();
+
+        private void ShowPanel (UIElement panel) {
+            HideAllPanels();
+            if (panel != null)
+                panel.Visibility = Visibility.Visible;
+            if (editOverlay != null)
+                editOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void HidePanel (UIElement panel) {
+            if (panel != null)
+                panel.Visibility = Visibility.Collapsed;
+            HideOverlayIfIdle();
+        }
+
+        private void HideAllPanels () {
+            SetCollapsed(editPanel);
+            SetCollapsed(batchPanel);
+            SetCollapsed(exportPanel);
+            SetCollapsed(importPanel);
+            SetCollapsed(msgDialog);
+        }
+
+        private void CloseAllPanels () {
+            _msgPending = MsgPending.None;
+            HideAllPanels();
+            if (editOverlay != null)
+                editOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void HideOverlayIfIdle () {
+            bool busy =
+                IsShown(editPanel) || IsShown(batchPanel) ||
+                IsShown(exportPanel) || IsShown(importPanel) ||
+                IsShown(msgDialog);
+
+            if (!busy && editOverlay != null)
+                editOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private static void SetCollapsed (UIElement e) {
+            if (e != null)
+                e.Visibility = Visibility.Collapsed;
+        }
+
+        private static bool IsShown (UIElement e) =>
+            e != null && e.Visibility == Visibility.Visible;
+
+        // -------------------- 工具 --------------------
+
+        private void RefreshList () {
+            variableTable.Load(_selectedDeviceId);
+            deviceList.Reload();
+        }
+
+        private int CountCurrentVariables () {
+            IVariableService vars = Svc<IVariableService>();
+            if (vars == null || string.IsNullOrEmpty(_selectedDeviceId))
+                return 0;
+            return vars.Variables
+                .Count(v => v != null && v.DeviceId == _selectedDeviceId);
+        }
+
+        private bool EnsureDeviceSelected () {
+            if (!string.IsNullOrEmpty(_selectedDeviceId))
+                return true;
+            ShowInfo("提示", "请先选择左侧设备");
             return false;
+        }
+
+        private string GetSelectedDeviceTitle () {
+            IDeviceService devices = Svc<IDeviceService>();
+            if (devices == null || string.IsNullOrEmpty(_selectedDeviceId))
+                return "";
+
+            DeviceInfo d = devices.Devices
+                .FirstOrDefault(x => x != null && x.Id == _selectedDeviceId);
+            if (d == null) return "";
+
+            string name = string.IsNullOrEmpty(d.Name) ? d.Id : d.Name;
+            return string.IsNullOrEmpty(d.Model) ? name : (name + " · " + d.Model);
         }
     }
 }
