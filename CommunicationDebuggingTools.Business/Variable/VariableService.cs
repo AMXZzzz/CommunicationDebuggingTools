@@ -10,10 +10,15 @@ using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Business.Variable {
+
     /// <summary>
-    /// 变量业务：配置持久化 + 通过设备会话做协议读写。
+    /// 变量业务：配置持久化 + 通过设备已建立的 <see cref="IProtocol"/> 会话做读写。
+    /// <para>
+    /// 不解析 Address，不解释协议；只组装 <see cref="ProtocolDataMessage"/> 并调用插件。
+    /// </para>
     /// </summary>
     public class VariableService : IVariableService {
+
         private readonly IDeviceService _devices;
         private readonly IVariableRepository _repository;
         private readonly IAppLogger _log;
@@ -69,7 +74,6 @@ namespace CommunicationDebuggingTools.Business.Variable {
             Normalize(item);
             VariableItem old = FindRequired(item.Id);
             ValidateForUpsert(item, item.Id);
-
             old.DeviceId = item.DeviceId;
             old.Name = item.Name;
             old.Address = item.Address;
@@ -89,7 +93,9 @@ namespace CommunicationDebuggingTools.Business.Variable {
             Save();
         }
 
-        /// <summary>读一点：权限 → 设备 → 协议 → 回填 LastValue。</summary>
+        /// <summary>
+        /// 读一点：权限 → 取协议会话 → 组装报文 → 回填 LastValue / Quality。
+        /// </summary>
         public async Task<bool> ReadAsync (string variableId, CancellationToken cancellationToken) {
             VariableItem v = FindRequired(variableId);
 
@@ -100,10 +106,10 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 return false;
             }
 
-            IProtocolDataAccess access;
+            IProtocol protocol;
             DeviceInfo device;
             string err;
-            if (!TryGetDataAccess(v.DeviceId, out access, out device, out err)) {
+            if (!TryGetProtocol(v.DeviceId, out protocol, out device, out err)) {
                 v.LastError = err;
                 v.Quality = DataQuality.Bad;
                 LogWarn(err + " — " + v.Name);
@@ -113,7 +119,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
             ProtocolDataMessage msg = BuildMessage(v, device, null);
             ProtocolDataMessage result;
             try {
-                result = await access.ReadAsync(msg, cancellationToken);
+                result = await protocol.ReadAsync(msg, cancellationToken);
             } catch (Exception ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
@@ -124,7 +130,6 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
             v.LastError = result.ErrorMessage ?? "";
             v.Quality = result.Quality;
-
             if (result.Success) {
                 v.LastValue = result.Value;
                 return true;
@@ -136,9 +141,13 @@ namespace CommunicationDebuggingTools.Business.Variable {
             return false;
         }
 
-        /// <summary>写一点：权限 → 协议 → 成功则更新 LastValue。</summary>
+        /// <summary>
+        /// 写一点：权限 → 协议 → 成功则更新 LastValue。
+        /// </summary>
         public async Task<bool> WriteAsync (
-            string variableId, object value, CancellationToken cancellationToken) {
+            string variableId,
+            object value,
+            CancellationToken cancellationToken) {
             VariableItem v = FindRequired(variableId);
 
             if (v.Access == VariableAccess.ReadOnly) {
@@ -148,10 +157,10 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 return false;
             }
 
-            IProtocolDataAccess access;
+            IProtocol protocol;
             DeviceInfo device;
             string err;
-            if (!TryGetDataAccess(v.DeviceId, out access, out device, out err)) {
+            if (!TryGetProtocol(v.DeviceId, out protocol, out device, out err)) {
                 v.LastError = err;
                 v.Quality = DataQuality.Bad;
                 LogWarn(err + " — " + v.Name);
@@ -161,7 +170,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
             ProtocolDataMessage msg = BuildMessage(v, device, value);
             ProtocolDataMessage result;
             try {
-                result = await access.WriteAsync(msg, cancellationToken);
+                result = await protocol.WriteAsync(msg, cancellationToken);
             } catch (Exception ex) {
                 v.LastError = ex.Message;
                 v.Quality = DataQuality.Bad;
@@ -171,7 +180,6 @@ namespace CommunicationDebuggingTools.Business.Variable {
             }
 
             v.LastError = result.ErrorMessage ?? "";
-
             if (result.Success) {
                 v.LastValue = value;
                 v.Quality = DataQuality.Good;
@@ -185,10 +193,12 @@ namespace CommunicationDebuggingTools.Business.Variable {
             return false;
         }
 
+        /// <summary>按设备批量读（跳过只写点）。</summary>
         public async Task ReadByDeviceAsync (string deviceId, CancellationToken cancellationToken) {
-            if (string.IsNullOrEmpty(deviceId)) return;
+            if (string.IsNullOrEmpty(deviceId))
+                return;
 
-            foreach (VariableItem v in Variables.Where(x => x.DeviceId == deviceId).ToList()) {
+            foreach (VariableItem v in Variables.Where(x => x != null && x.DeviceId == deviceId).ToList()) {
                 if (v.Access == VariableAccess.WriteOnly)
                     continue;
                 await ReadAsync(v.Id, cancellationToken);
@@ -197,16 +207,19 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
         // -------------------- 私有 --------------------
 
-        private bool TryGetDataAccess (
+        /// <summary>
+        /// 取已连接设备的协议会话。不再使用 IProtocolDataAccess。
+        /// </summary>
+        private bool TryGetProtocol (
             string deviceId,
-            out IProtocolDataAccess access,
+            out IProtocol protocol,
             out DeviceInfo device,
             out string error) {
-            access = null;
+            protocol = null;
             device = null;
             error = "";
 
-            device = _devices.Devices.FirstOrDefault(d => d.Id == deviceId);
+            device = _devices.Devices.FirstOrDefault(d => d != null && d.Id == deviceId);
             if (device == null) {
                 error = "设备不存在";
                 return false;
@@ -217,18 +230,27 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 return false;
             }
 
-            IProtocol protocol = _devices.GetProtocol(deviceId);
-            access = protocol as IProtocolDataAccess;
-            if (access == null) {
-                error = "协议不支持数据读写";
+            protocol = _devices.GetProtocol(deviceId);
+            if (protocol == null) {
+                error = "无协议会话";
+                return false;
+            }
+
+            if (!protocol.IsConnected) {
+                error = "协议会话已断开";
                 return false;
             }
 
             return true;
         }
 
+        /// <summary>
+        /// 组装读写报文：Address 原样传入，序与编码来自设备默认。
+        /// </summary>
         private static ProtocolDataMessage BuildMessage (
-            VariableItem v, DeviceInfo device, object writeValue) {
+            VariableItem v,
+            DeviceInfo device,
+            object writeValue) {
             return new ProtocolDataMessage {
                 Address = v.Address ?? "",
                 DataType = v.DataType,
@@ -282,6 +304,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
             return v;
         }
 
+        /// <summary>读写失败后若协议已断，通知 DeviceService 标离线。</summary>
         private void CheckAndMarkDisconnected (string deviceId) {
             try {
                 IProtocol protocol = _devices.GetProtocol(deviceId);

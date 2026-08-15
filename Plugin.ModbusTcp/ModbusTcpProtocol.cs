@@ -33,20 +33,19 @@ namespace Plugin.ModbusTcp {
             ProtocolConnectionContext context,
             CancellationToken cancellationToken) {
             if (context == null)
-                throw new ArgumentNullException("context");
-
+                throw new ArgumentNullException(nameof(context));
             _session.Disconnect();
             if (string.IsNullOrWhiteSpace(context.Ip))
                 return false;
 
-            _session.UnitId = (byte)ParseUnitId(context.ProtocolSettingsJson);
+            int station = context.StationNo;
+            if (station < 0) station = 0;
+            if (station > 255) station = 255;
+            _session.UnitId = (byte)station;
 
             try {
-                await _session.ConnectAsync(
-                    context.Ip,
-                    context.Port,
-                    context.TimeoutMs > 0 ? context.TimeoutMs : 3000,
-                    cancellationToken);
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                await _session.ConnectAsync(context.Ip, context.Port, timeout, cancellationToken);
                 return true;
             } catch {
                 _session.Disconnect();

@@ -51,18 +51,20 @@ namespace Plugin.SiemensS7 {
         public async Task<bool> ConnectAsync (
             ProtocolConnectionContext context,
             CancellationToken cancellationToken) {
-            if (context == null) throw new ArgumentNullException("context");
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
 
             _session.Disconnect();
-            if (string.IsNullOrWhiteSpace(context.Ip)) return false;
+            if (string.IsNullOrWhiteSpace(context.Ip))
+                return false;
 
-            _session.ApplySettingsJson(context.ProtocolSettingsJson);
+            // 仅插件内解析 rack/slot；禁止再用 ProtocolSettingsJson
+            _session.ApplySettingsJson(context.ExtraSettingsJson);
+
             try {
                 int port = context.Port > 0 ? context.Port : 102;
-                await _session.ConnectAsync(
-                    context.Ip, port,
-                    context.TimeoutMs > 0 ? context.TimeoutMs : 3000,
-                    cancellationToken);
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken);
                 return true;
             } catch {
                 _session.Disconnect();

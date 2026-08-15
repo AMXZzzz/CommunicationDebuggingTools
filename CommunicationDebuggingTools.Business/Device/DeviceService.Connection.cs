@@ -238,11 +238,17 @@ namespace CommunicationDebuggingTools.Business.Device {
             return _sessions.TryGetValue(deviceId, out p) ? p : null;
         }
 
+        /// <summary>
+        /// 设备 → 建连上下文。只拷贝共性字段，不解析 ExtraSettingsJson。
+        /// </summary>
         private static ProtocolConnectionContext BuildConnectionContext (DeviceInfo device) {
             return new ProtocolConnectionContext {
-                Ip = device.Ip,
+                Ip = device.Ip ?? "",
                 Port = device.Port,
-                ProtocolSettingsJson = device.ProtocolSettingsJson,
+                StationNo = device.StationNo,
+                ExtraSettingsJson = string.IsNullOrWhiteSpace(device.ExtraSettingsJson)
+                    ? "{}"
+                    : device.ExtraSettingsJson,
                 ByteOrder = device.ByteOrder,
                 WordOrder = device.WordOrder,
                 StringEncoding = device.StringEncoding,

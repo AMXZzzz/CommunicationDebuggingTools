@@ -6,40 +6,55 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
-namespace Plugin.Panasonic {
+namespace Plugin.SiemensS7 {
+
     /// <summary>
-    /// 松下 MEWTOCOL-COM 协议插件。
-    /// 接点读/写：RCS / WCS；数据字读/写：RD / WD。
-    /// 地址示例：R100、X0、Y10、DT200、WR0。
-    ///
-    /// 数据类型与寄存器字数对应：
-    ///   Bool / Int16 / UInt16 → 1 个字（count = 01）
-    ///   Int32 / UInt32 / Float → 2 个字（count = 02），低字/高字顺序由 WordOrder 决定
-    ///   Double → 4 个字（count = 04）
+    /// Siemens S7 协议插件（ISO-on-TCP / 端口 102）。
+    /// 地址与 PDU 解析全部在本插件内；Business/UI 不解析。
+    /// ExtraSettingsJson 仅本类读取 rack/slot（若有）。
     /// </summary>
-    public sealed class PanasonicProtocol : IProtocol, IProtocolDataAccess, IDisposable {
-        private readonly PanasonicSession _session = new PanasonicSession();
+    public sealed class SiemensS7Protocol : IProtocol, IDisposable {
+
+        private readonly SiemensS7Session _session = new SiemensS7Session();
         private bool _disposed;
+
+        const byte TS_BIT = 0x01;
+        const byte TS_BYTE = 0x02;
+        const byte TS_WORD = 0x04;
+        const byte TS_DWORD = 0x06;
+        const byte TS_REAL = 0x08;
+
+        const byte AREA_I = 0x81;
+        const byte AREA_Q = 0x82;
+        const byte AREA_M = 0x83;
+        const byte AREA_DB = 0x84;
+        const byte AREA_V = 0x87;
 
         public bool IsConnected => _session.IsConnected;
 
-        public string GetProtocolName () => "Panasonic MEWTOCOL";
+        public string GetProtocolName () => "Siemens S7";
 
+        /// <summary>
+        /// 建连：Ip/Port/Timeout 来自上下文；
+        /// rack/slot 仅从 ExtraSettingsJson 解析（插件内）；StationNo 本协议不使用。
+        /// </summary>
         public async Task<bool> ConnectAsync (
             ProtocolConnectionContext context,
             CancellationToken cancellationToken) {
-            if (context == null) throw new ArgumentNullException("context");
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
 
             _session.Disconnect();
-            if (string.IsNullOrWhiteSpace(context.Ip)) return false;
+            if (string.IsNullOrWhiteSpace(context.Ip))
+                return false;
 
-            _session.ApplySettingsJson(context.ProtocolSettingsJson);
+            // 扩展参数只在插件内解析；无则使用 Session 默认 rack/slot
+            _session.ApplyExtraSettingsJson(context.ExtraSettingsJson);
+
             try {
-                int port = context.Port > 0 ? context.Port : 9094;
-                await _session.ConnectAsync(
-                    context.Ip, port,
-                    context.TimeoutMs > 0 ? context.TimeoutMs : 3000,
-                    cancellationToken);
+                int port = context.Port > 0 ? context.Port : 102;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken);
                 return true;
             } catch {
                 _session.Disconnect();
@@ -49,52 +64,23 @@ namespace Plugin.Panasonic {
 
         public void Disconnect () => _session.Disconnect();
 
-        // ══════════════════════════════════════════════
-        //  读
-        // ══════════════════════════════════════════════
         public Task<ProtocolDataMessage> ReadAsync (
             ProtocolDataMessage request,
             CancellationToken cancellationToken) {
-            if (request == null) throw new ArgumentNullException("request");
-            if (!_session.IsConnected) return Task.FromResult(Fail(request, "未连接"));
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+            if (!_session.IsConnected)
+                return Task.FromResult(Fail(request, "未连接"));
 
             try {
                 cancellationToken.ThrowIfCancellationRequested();
-                PanasonicAddress addr = PanasonicSession.ParseAddress(request.Address);
-
-                // ── 触点 ──
-                if (addr.IsBit || request.DataType == VariableDataType.Bool) {
-                    string cmd  = "RCS" + PanasonicSession.FormatContact(addr);
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                    request.Value = ParseContactValue(resp);
-                }
-                // ── 32位：Float / Int32 / UInt32 ──
-                else if (Is32Bit(request.DataType)) {
-                    string cmd  = "RD" + PanasonicSession.FormatDataAddr(addr) + "02";
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                    string hex  = ExtractRdHex(resp, 2);
-                    request.Value = Decode32(hex, request.DataType, request.WordOrder);
-                }
-                // ── 64位：Double ──
-                else if (request.DataType == VariableDataType.Double) {
-                    string cmd  = "RD" + PanasonicSession.FormatDataAddr(addr) + "04";
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                    string hex  = ExtractRdHex(resp, 4);
-                    request.Value = DecodeDouble(hex, request.WordOrder);
-                }
-                // ── 16位：Int16 / UInt16 及其他 ──
-                else {
-                    string cmd  = "RD" + PanasonicSession.FormatDataAddr(addr) + "01";
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                    string hex  = ExtractRdHex(resp, 1);
-                    ushort word = ushort.Parse(hex, NumberStyles.HexNumber);
-                    request.Value = ConvertWord16(word, request.DataType);
-                }
-
+                S7Address addr = SiemensS7Session.ParseAddress(request.Address);
+                byte ts = GetTransportSize(request.DataType, addr);
+                int elemCount = (request.DataType == VariableDataType.Double) ? 2 : 1;
+                byte[] job = BuildReadJob(addr, ts, elemCount, _session.NextRef());
+                byte[] resp = _session.Transact(job);
+                byte[] raw = ParseReadResponse(resp, ts, elemCount);
+                request.Value = FromS7Bytes(raw, request.DataType);
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
@@ -106,59 +92,22 @@ namespace Plugin.Panasonic {
             }
         }
 
-        // ══════════════════════════════════════════════
-        //  写
-        // ══════════════════════════════════════════════
         public Task<ProtocolDataMessage> WriteAsync (
             ProtocolDataMessage request,
             CancellationToken cancellationToken) {
-            if (request == null) throw new ArgumentNullException("request");
-            if (!_session.IsConnected) return Task.FromResult(Fail(request, "未连接"));
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+            if (!_session.IsConnected)
+                return Task.FromResult(Fail(request, "未连接"));
 
             try {
                 cancellationToken.ThrowIfCancellationRequested();
-                PanasonicAddress addr = PanasonicSession.ParseAddress(request.Address);
-
-                // ── 触点 ──
-                if (addr.IsBit || request.DataType == VariableDataType.Bool) {
-                    bool bit = ToBool(request.Value);
-                    string cmd = "WCS"
-                        + PanasonicSession.FormatContact(addr)
-                        + (bit ? "1" : "0");
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                }
-                // ── 32位：Float / Int32 / UInt32 ──
-                else if (Is32Bit(request.DataType)) {
-                    string data = Encode32(request.Value, request.DataType, request.WordOrder);
-                    string cmd = "WD"
-                        + PanasonicSession.FormatDataAddr(addr)
-                        + "02"          // 2 个字
-                        + data;
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                }
-                // ── 64位：Double ──
-                else if (request.DataType == VariableDataType.Double) {
-                    string data = EncodeDouble(request.Value, request.WordOrder);
-                    string cmd = "WD"
-                        + PanasonicSession.FormatDataAddr(addr)
-                        + "04"          // 4 个字
-                        + data;
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                }
-                // ── 16位 ──
-                else {
-                    ushort word = ToUInt16(request.Value);
-                    string cmd = "WD"
-                        + PanasonicSession.FormatDataAddr(addr)
-                        + "01"          // 1 个字
-                        + word.ToString("X4");
-                    string resp = _session.Transact(cmd);
-                    EnsureOk(resp);
-                }
-
+                S7Address addr = SiemensS7Session.ParseAddress(request.Address);
+                byte ts = GetTransportSize(request.DataType, addr);
+                byte[] data = ToS7Bytes(request.Value, request.DataType);
+                byte[] job = BuildWriteJob(addr, ts, data, _session.NextRef());
+                byte[] resp = _session.Transact(job);
+                ParseWriteResponse(resp);
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
@@ -170,267 +119,254 @@ namespace Plugin.Panasonic {
             }
         }
 
-        // ══════════════════════════════════════════════
-        //  响应解析
-        // ══════════════════════════════════════════════
-
-        private static void EnsureOk (string resp) {
-            if (string.IsNullOrWhiteSpace(resp))
-                throw new Exception("空响应");
-            if (resp.IndexOf('!') >= 0)
-                throw new Exception("PLC 返回错误: " + resp.Trim());
-            if (resp.IndexOf('$') < 0 && resp.IndexOf('%') < 0)
-                throw new Exception("异常响应: " + resp.Trim());
-        }
-
-        /// <summary>
-        /// 读触点响应：帧格式 %SS$RCS[V][BCC]，V 在倒数第 3 位。
-        /// </summary>
-        private static bool ParseContactValue (string resp) {
-            if (resp == null || resp.Length < 10)
-                throw new Exception("触点响应帧过短: " + resp);
-            char v = resp[resp.Length - 3];
-            if (v == '1') return true;
-            if (v == '0') return false;
-            throw new Exception("触点值字符非法('" + v + "'): " + resp);
-        }
-
-        /// <summary>
-        /// 从 RD 响应中按位置提取数据十六进制串。
-        /// 帧格式：%SS$RD[words×4hex][BCC2]
-        /// </summary>
-        private static string ExtractRdHex (string resp, int words) {
-            int pos = resp.IndexOf("$RD", StringComparison.OrdinalIgnoreCase);
-            if (pos < 0) throw new Exception("RD 响应格式错误: " + resp);
-            pos += 3;                    // 跳过 "$RD"
-            int needed = words * 4;
-            if (resp.Length < pos + needed + 2)
-                throw new Exception("RD 响应数据不足（需 " + needed + " 字符）: " + resp);
-            return resp.Substring(pos, needed);
-        }
-
-        // ══════════════════════════════════════════════
-        //  编解码：32位（Float / Int32 / UInt32）
-        // ══════════════════════════════════════════════
-
-        /// <summary>
-        /// 按 WordOrder 把 hex 串（8字符）解码为 Float / Int32 / UInt32。
-        /// LowWordFirst ：hex[0..3]=低字，hex[4..7]=高字
-        /// HighWordFirst：hex[0..3]=高字，hex[4..7]=低字
-        /// </summary>
-        private static object Decode32 (string hex, VariableDataType t, WordOrder wordOrder) {
-            if (hex.Length < 8) throw new Exception("32位数据不足 8 字符: " + hex);
-
-            ushort w0 = ushort.Parse(hex.Substring(0, 4), NumberStyles.HexNumber);
-            ushort w1 = ushort.Parse(hex.Substring(4, 4), NumberStyles.HexNumber);
-
-            ushort wLow, wHigh;
-            if (wordOrder == WordOrder.LowWordFirst) {
-                wLow = w0;
-                wHigh = w1;
-            } else {
-                wHigh = w0;
-                wLow = w1;
-            }
-
-            byte[] bytes = new byte[4];
-            byte[] lb = BitConverter.GetBytes(wLow);
-            byte[] hb = BitConverter.GetBytes(wHigh);
-            bytes[0] = lb[0]; bytes[1] = lb[1];
-            bytes[2] = hb[0]; bytes[3] = hb[1];
-
-            switch (t) {
-                case VariableDataType.Float: return BitConverter.ToSingle(bytes, 0);
-                case VariableDataType.Int32: return BitConverter.ToInt32(bytes, 0);
-                case VariableDataType.UInt32: return BitConverter.ToUInt32(bytes, 0);
-                default: return BitConverter.ToUInt32(bytes, 0);
-            }
-        }
-
-        /// <summary>按 WordOrder 把 Float / Int32 / UInt32 编码为 8字符十六进制。</summary>
-        private static string Encode32 (object value, VariableDataType t, WordOrder wordOrder) {
-            byte[] bytes;
-            switch (t) {
-                case VariableDataType.Float:
-                    bytes = BitConverter.GetBytes(ToFloat(value));
-                    break;
-                case VariableDataType.UInt32:
-                    bytes = BitConverter.GetBytes(ToUInt32(value));
-                    break;
-                default: // Int32
-                    bytes = BitConverter.GetBytes(ToInt32(value));
-                    break;
-            }
-
-            // bytes[0..1] = 低字, bytes[2..3] = 高字（BitConverter 小端）
-            ushort wLow  = BitConverter.ToUInt16(bytes, 0);
-            ushort wHigh = BitConverter.ToUInt16(bytes, 2);
-
-            if (wordOrder == WordOrder.LowWordFirst)
-                return wLow.ToString("X4") + wHigh.ToString("X4");
-            else
-                return wHigh.ToString("X4") + wLow.ToString("X4");
-        }
-
-        // ══════════════════════════════════════════════
-        //  编解码：64位（Double）
-        // ══════════════════════════════════════════════
-
-        private static object DecodeDouble (string hex, WordOrder wordOrder) {
-            if (hex.Length < 16) throw new Exception("64位数据不足 16 字符: " + hex);
-
-            ushort[] words = new ushort[4];
-            for (int i = 0; i < 4; i++)
-                words[i] = ushort.Parse(hex.Substring(i * 4, 4), NumberStyles.HexNumber);
-
-            byte[] bytes = new byte[8];
-            if (wordOrder == WordOrder.LowWordFirst) {
-                // words[0]=低字 … words[3]=高字
-                for (int i = 0; i < 4; i++) {
-                    byte[] wb = BitConverter.GetBytes(words[i]);
-                    bytes[i * 2] = wb[0];
-                    bytes[i * 2 + 1] = wb[1];
-                }
-            } else {
-                // words[0]=高字 … words[3]=低字
-                for (int i = 0; i < 4; i++) {
-                    byte[] wb = BitConverter.GetBytes(words[3 - i]);
-                    bytes[i * 2] = wb[0];
-                    bytes[i * 2 + 1] = wb[1];
-                }
-            }
-            return BitConverter.ToDouble(bytes, 0);
-        }
-
-        private static string EncodeDouble (object value, WordOrder wordOrder) {
-            double d;
-            if (value is double dv) d = dv;
-            else if (value is float fv) d = fv;
-            else double.TryParse(value?.ToString() ?? "0", NumberStyles.Any,
-                                 CultureInfo.InvariantCulture, out d);
-
-            byte[] bytes  = BitConverter.GetBytes(d);
-            ushort[] words = new ushort[4];
-            for (int i = 0; i < 4; i++)
-                words[i] = BitConverter.ToUInt16(bytes, i * 2);
-
-            // words[0]=低字, words[3]=高字
-            if (wordOrder == WordOrder.LowWordFirst)
-                return words[0].ToString("X4") + words[1].ToString("X4")
-                     + words[2].ToString("X4") + words[3].ToString("X4");
-            else
-                return words[3].ToString("X4") + words[2].ToString("X4")
-                     + words[1].ToString("X4") + words[0].ToString("X4");
-        }
-
-        // ══════════════════════════════════════════════
-        //  16位转换
-        // ══════════════════════════════════════════════
-
-        private static object ConvertWord16 (ushort word, VariableDataType t) {
-            switch (t) {
-                case VariableDataType.Int16: return (short)word;
-                case VariableDataType.UInt16: return word;
-                default: return word;
-            }
-        }
-
-        // ══════════════════════════════════════════════
-        //  值类型转换辅助
-        // ══════════════════════════════════════════════
-
-        private static bool Is32Bit (VariableDataType t) =>
-            t == VariableDataType.Float ||
-            t == VariableDataType.Int32 ||
-            t == VariableDataType.UInt32;
-
-        private static float ToFloat (object value) {
-            if (value is float f) return f;
-            if (value is double d) return (float)d;
-            float r;
-            if (float.TryParse(value?.ToString() ?? "",
-                    NumberStyles.Any, CultureInfo.InvariantCulture, out r)) return r;
-            return 0f;
-        }
-
-        private static int ToInt32 (object value) {
-            if (value is int i) return i;
-            if (value is long l) return (int)l;
-            if (value is float f) return (int)f;
-            if (value is double d) return (int)d;
-            int r;
-            if (int.TryParse(value?.ToString() ?? "",
-                    NumberStyles.Integer, CultureInfo.InvariantCulture, out r)) return r;
-            double dbl;
-            if (double.TryParse(value?.ToString() ?? "",
-                    NumberStyles.Any, CultureInfo.InvariantCulture, out dbl)) return (int)dbl;
-            return 0;
-        }
-
-        private static uint ToUInt32 (object value) {
-            if (value is uint u) return u;
-            if (value is int i) return (uint)i;
-            if (value is float f) return (uint)(int)f;
-            if (value is double d) return (uint)(int)d;
-            uint r;
-            if (uint.TryParse(value?.ToString() ?? "",
-                    NumberStyles.Integer, CultureInfo.InvariantCulture, out r)) return r;
-            return 0;
-        }
-
-        private static ushort ToUInt16 (object value) {
-            if (value is ushort u) return u;
-            if (value is short s) return (ushort)s;
-            if (value is int i) return (ushort)i;
-            if (value is long l) return (ushort)l;
-            double d;
-            if (double.TryParse(value?.ToString() ?? "",
-                    NumberStyles.Any, CultureInfo.InvariantCulture, out d))
-                return (ushort)(int)d;
-            return 0;
-        }
-
-        private static bool ToBool (object value) {
-            if (value is bool b) return b;
-            if (value == null) return false;
-            string s = value.ToString().Trim();
-            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)) return true;
-            if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase)) return false;
-            int n;
-            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out n))
-                return n != 0;
-            return false;
-        }
-
-        private static ProtocolDataMessage Fail (ProtocolDataMessage request, string message) {
-            request.Success = false;
-            request.Quality = DataQuality.Bad;
-            request.ErrorMessage = message ?? "";
-            return request;
-        }
-
-
-        /// <summary>
-        /// 探针：先做 Socket.Poll 快速判断 TCP 层，通了再发 RCS R0000 验证协议层。
-        /// 返回 false 可能是 TCP 断线也可能是通讯异常，调用方通过 IsConnected 区分。
-        /// </summary>
+        /// <summary>探针：TCP 就绪后读 MB0。</summary>
         public Task<bool> PingAsync (CancellationToken cancellationToken) {
             if (!IsConnected)
                 return Task.FromResult(false);
-
             try {
                 cancellationToken.ThrowIfCancellationRequested();
-                // R0 → R00000，再 RCS
-                var addr = PanasonicSession.ParseAddress("R0");
-                string contact = PanasonicSession.FormatContact(addr);
-                string resp = _session.Transact("RCS" + contact);
-                return Task.FromResult(resp != null && resp.IndexOf('$') >= 0);
+                S7Address addr = SiemensS7Session.ParseAddress("MB0");
+                byte[] job = BuildReadJob(addr, TS_BYTE, 1, _session.NextRef());
+                byte[] resp = _session.Transact(job);
+                return Task.FromResult(resp != null && resp.Length > 1 && resp[1] == 0x03);
             } catch {
-                return Task.FromResult(false); // 不主动 Disconnect，交给 DeviceService
+                return Task.FromResult(false);
             }
         }
 
+        // ── PDU ──
 
+        static byte[] BuildReadJob (S7Address addr, byte ts, int elemCount, ushort pduRef) {
+            byte areaCode = AreaCode(addr);
+            int bitAddr = addr.ByteOffset * 8 + (addr.Bit >= 0 ? addr.Bit : 0);
+            return new byte[] {
+                0x32, 0x01, 0x00, 0x00,
+                (byte)(pduRef >> 8), (byte)(pduRef & 0xFF),
+                0x00, 0x0E,
+                0x00, 0x00,
+                0x04, 0x01,
+                0x12, 0x0A, 0x10,
+                ts,
+                (byte)(elemCount >> 8), (byte)(elemCount & 0xFF),
+                (byte)(addr.DbNumber >> 8), (byte)(addr.DbNumber & 0xFF),
+                areaCode,
+                (byte)(bitAddr >> 16), (byte)(bitAddr >> 8), (byte)(bitAddr & 0xFF)
+            };
+        }
+
+        static byte[] BuildWriteJob (S7Address addr, byte ts, byte[] data, ushort pduRef) {
+            byte areaCode = AreaCode(addr);
+            int bitAddr = addr.ByteOffset * 8 + (addr.Bit >= 0 ? addr.Bit : 0);
+            byte rts = (ts == TS_BIT) ? (byte)0x03 : (byte)0x04;
+            int bitLen = (ts == TS_BIT) ? 1 : data.Length * 8;
+            int pLen = 14;
+            int dLen = 4 + data.Length;
+            byte[] pdu = new byte[10 + pLen + dLen];
+            int i = 0;
+            pdu[i++] = 0x32; pdu[i++] = 0x01; pdu[i++] = 0x00; pdu[i++] = 0x00;
+            pdu[i++] = (byte)(pduRef >> 8); pdu[i++] = (byte)(pduRef & 0xFF);
+            pdu[i++] = (byte)(pLen >> 8); pdu[i++] = (byte)(pLen & 0xFF);
+            pdu[i++] = (byte)(dLen >> 8); pdu[i++] = (byte)(dLen & 0xFF);
+            pdu[i++] = 0x05; pdu[i++] = 0x01;
+            pdu[i++] = 0x12; pdu[i++] = 0x0A; pdu[i++] = 0x10;
+            pdu[i++] = ts;
+            pdu[i++] = 0x00; pdu[i++] = 0x01;
+            pdu[i++] = (byte)(addr.DbNumber >> 8); pdu[i++] = (byte)(addr.DbNumber & 0xFF);
+            pdu[i++] = areaCode;
+            pdu[i++] = (byte)(bitAddr >> 16); pdu[i++] = (byte)(bitAddr >> 8); pdu[i++] = (byte)(bitAddr & 0xFF);
+            pdu[i++] = 0x00;
+            pdu[i++] = rts;
+            pdu[i++] = (byte)(bitLen >> 8); pdu[i++] = (byte)(bitLen & 0xFF);
+            Array.Copy(data, 0, pdu, i, data.Length);
+            return pdu;
+        }
+
+        static byte[] ParseReadResponse (byte[] s7, byte ts, int elemCount) {
+            if (s7 == null || s7.Length < 14)
+                throw new Exception("Read 响应过短");
+            if (s7[1] != 0x03)
+                throw new Exception("非 Ack-Data");
+            if (s7[10] != 0x00 || s7[11] != 0x00)
+                throw new Exception("S7 错误 errClass=0x" + s7[10].ToString("X2")
+                    + " errCode=0x" + s7[11].ToString("X2"));
+            int paramLen = (s7[6] << 8) | s7[7];
+            int dOff = 12 + paramLen;
+            if (dOff + 4 > s7.Length)
+                throw new Exception("Read 数据段不足");
+            byte rc = s7[dOff];
+            if (rc != 0xFF)
+                throw new Exception("读取失败，返回码 0x" + rc.ToString("X2"));
+            byte rts = s7[dOff + 1];
+            int bitLen = (s7[dOff + 2] << 8) | s7[dOff + 3];
+            int byteLen;
+            if (rts == 0x03) byteLen = 1;
+            else if (ts == TS_REAL || ts == TS_DWORD) byteLen = 4 * elemCount;
+            else byteLen = (bitLen + 7) / 8;
+            if (dOff + 4 + byteLen > s7.Length)
+                throw new Exception("Read 数据字节不足（需 " + byteLen + " 字节）");
+            byte[] data = new byte[byteLen];
+            Array.Copy(s7, dOff + 4, data, 0, byteLen);
+            return data;
+        }
+
+        static void ParseWriteResponse (byte[] s7) {
+            if (s7 == null || s7.Length < 12)
+                throw new Exception("Write 响应过短");
+            if (s7[1] != 0x03)
+                throw new Exception("非 Ack-Data");
+            if (s7[10] != 0x00 || s7[11] != 0x00)
+                throw new Exception("S7 错误 errClass=0x" + s7[10].ToString("X2")
+                    + " errCode=0x" + s7[11].ToString("X2"));
+            int paramLen = (s7[6] << 8) | s7[7];
+            int dOff = 12 + paramLen;
+            if (dOff >= s7.Length)
+                throw new Exception("Write 响应无数据");
+            if (s7[dOff] != 0xFF)
+                throw new Exception("写入失败，返回码 0x" + s7[dOff].ToString("X2"));
+        }
+
+        static object FromS7Bytes (byte[] d, VariableDataType dt) {
+            switch (dt) {
+                case VariableDataType.Bool:
+                    return d[0] != 0x00;
+                case VariableDataType.Int16:
+                    return (short)((d[0] << 8) | d[1]);
+                case VariableDataType.UInt16:
+                    return (ushort)((d[0] << 8) | d[1]);
+                case VariableDataType.Int32:
+                    return (d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3];
+                case VariableDataType.UInt32:
+                    return (uint)((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]);
+                case VariableDataType.Float: {
+                    byte[] le = new byte[] { d[3], d[2], d[1], d[0] };
+                    return BitConverter.ToSingle(le, 0);
+                }
+                case VariableDataType.Double: {
+                    byte[] le = new byte[] { d[7], d[6], d[5], d[4], d[3], d[2], d[1], d[0] };
+                    return BitConverter.ToDouble(le, 0);
+                }
+                default:
+                    return d;
+            }
+        }
+
+        static byte[] ToS7Bytes (object value, VariableDataType dt) {
+            switch (dt) {
+                case VariableDataType.Bool:
+                    return new byte[] { (byte)(ToBool(value) ? 1 : 0) };
+                case VariableDataType.Int16: {
+                    short s = (short)ToInt64(value);
+                    return new byte[] { (byte)(s >> 8), (byte)(s & 0xFF) };
+                }
+                case VariableDataType.UInt16: {
+                    ushort u = (ushort)ToInt64(value);
+                    return new byte[] { (byte)(u >> 8), (byte)(u & 0xFF) };
+                }
+                case VariableDataType.Int32: {
+                    int v = (int)ToInt64(value);
+                    return new byte[] {
+                        (byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)(v & 0xFF) };
+                }
+                case VariableDataType.UInt32: {
+                    uint u = (uint)ToInt64(value);
+                    return new byte[] {
+                        (byte)(u >> 24), (byte)(u >> 16), (byte)(u >> 8), (byte)(u & 0xFF) };
+                }
+                case VariableDataType.Float: {
+                    byte[] le = BitConverter.GetBytes(ToFloat(value));
+                    return new byte[] { le[3], le[2], le[1], le[0] };
+                }
+                case VariableDataType.Double: {
+                    byte[] le = BitConverter.GetBytes(ToDouble(value));
+                    return new byte[] { le[7], le[6], le[5], le[4], le[3], le[2], le[1], le[0] };
+                }
+                default:
+                    throw new Exception("不支持的数据类型写入: " + dt);
+            }
+        }
+
+        static byte GetTransportSize (VariableDataType dt, S7Address addr) {
+            switch (dt) {
+                case VariableDataType.Bool: return TS_BIT;
+                case VariableDataType.Int16:
+                case VariableDataType.UInt16: return TS_WORD;
+                case VariableDataType.Int32:
+                case VariableDataType.UInt32: return TS_DWORD;
+                case VariableDataType.Float: return TS_REAL;
+                case VariableDataType.Double: return TS_DWORD;
+                default:
+                    switch (addr.Size) {
+                        case S7TransportSize.Bit: return TS_BIT;
+                        case S7TransportSize.Byte: return TS_BYTE;
+                        case S7TransportSize.Word: return TS_WORD;
+                        case S7TransportSize.DWord: return TS_DWORD;
+                        default: return TS_WORD;
+                    }
+            }
+        }
+
+        static byte AreaCode (S7Address addr) {
+            switch (addr.Area) {
+                case 'D': return AREA_DB;
+                case 'I': return AREA_I;
+                case 'Q': return AREA_Q;
+                case 'M': return AREA_M;
+                case 'V': return AREA_V;
+                default: throw new Exception("不支持的区域: " + addr.Area);
+            }
+        }
+
+        static bool ToBool (object v) {
+            if (v is bool b) return b;
+            if (v == null) return false;
+            string s = v.ToString().Trim();
+            if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)) return true;
+            if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase)) return false;
+            long n;
+            if (long.TryParse(s, out n)) return n != 0;
+            return false;
+        }
+
+        static long ToInt64 (object v) {
+            if (v is long l) return l;
+            if (v is int i) return i;
+            if (v is short s) return s;
+            if (v is ushort us) return us;
+            if (v is uint u) return u;
+            if (v is float f) return (long)f;
+            if (v is double d) return (long)d;
+            long r;
+            double dr;
+            if (long.TryParse(v?.ToString() ?? "", out r)) return r;
+            if (double.TryParse(v?.ToString() ?? "", NumberStyles.Any,
+                    CultureInfo.InvariantCulture, out dr)) return (long)dr;
+            return 0;
+        }
+
+        static float ToFloat (object v) {
+            if (v is float f) return f;
+            if (v is double d) return (float)d;
+            float r;
+            if (float.TryParse(v?.ToString() ?? "", NumberStyles.Any,
+                    CultureInfo.InvariantCulture, out r)) return r;
+            return 0f;
+        }
+
+        static double ToDouble (object v) {
+            if (v is double d) return d;
+            if (v is float f) return f;
+            double r;
+            if (double.TryParse(v?.ToString() ?? "", NumberStyles.Any,
+                    CultureInfo.InvariantCulture, out r)) return r;
+            return 0.0;
+        }
+
+        static ProtocolDataMessage Fail (ProtocolDataMessage req, string msg) {
+            req.Success = false;
+            req.Quality = DataQuality.Bad;
+            req.ErrorMessage = msg ?? "";
+            return req;
+        }
 
         public void Dispose () {
             if (_disposed) return;
