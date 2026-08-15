@@ -9,6 +9,7 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Views.Pages.Device;
 
 namespace CommunicationDebuggingTools.ViewModels {
 
@@ -151,7 +152,8 @@ namespace CommunicationDebuggingTools.ViewModels {
             DisplayList.Clear();
             foreach (DeviceInfo d in _devices.Devices)
                 DisplayList.Add(d);
-            DisplayList.Add(AddDeviceMarker.Instance);
+            // 与 XAML DataTemplate {x:Type device:AddDeviceMarker} 一致
+            DisplayList.Add(Views.Pages.Device.AddDeviceMarker.Instance);
             DeviceCount = _devices.Devices.Count;
         }
     }

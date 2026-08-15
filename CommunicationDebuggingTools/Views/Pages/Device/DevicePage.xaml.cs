@@ -1,253 +1,181 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.Linq;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
-using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Services;
+using CommunicationDebuggingTools.ViewModels;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
+
     /// <summary>
-    /// 设备管理页面。
-    /// <para>
-    /// 列表：设备卡片 + 末尾添加卡；编辑：遮罩 + <see cref="Visibility"/> 居中面板（随主窗口移动）；
-    /// 工具栏：<see cref="DeviceToolBar"/>；
-    /// 删除：点「删除」进入多选 →「确认删除」/「取消」。
-    /// </para>
-    /// <para>
-    /// 集合增删走 <see cref="RebuildDisplayList"/>；连接状态靠 DeviceInfo 属性通知刷新卡片。
-    /// </para>
+    /// 设备管理页：只负责 UI（列表模板、遮罩弹层、工具栏事件）。
+    /// 业务全部委托 <see cref="DevicePageViewModel"/>（由 DI 注入）。
     /// </summary>
     public partial class DevicePage : Page {
-        /// <summary>展示集合：DeviceInfo + 末尾 AddDeviceMarker。</summary>
-        private readonly ObservableCollection<object> _displayList =
-            new ObservableCollection<object>();
 
-        /// <summary>是否处于多选删除模式。</summary>
-        private bool _selectMode;
+        private readonly DevicePageViewModel _vm;
 
-        public DevicePage () {
+        /// <summary>DI 构造：App 中注册为 Transient。</summary>
+        public DevicePage (DevicePageViewModel vm) {
+            if (vm == null)
+                throw new ArgumentNullException(nameof(vm));
+
+            _vm = vm;
             InitializeComponent();
 
-            deviceList.ItemsSource = _displayList;
-            RebuildDisplayList();
+            DataContext = _vm;
+            deviceList.ItemsSource = _vm.DisplayList;
 
-            MyAppServices.Devices.Devices.CollectionChanged += Devices_CollectionChanged;
+            WireViewModel();
+            WireToolbar();
+            WireEditPanel();
 
-            if (editPanel != null) {
-                editPanel.CloseRequested += CloseEditPopup;
-                editPanel.SaveRequested += EditPanel_SaveRequested;
-                editPanel.DeleteRequested += EditPanel_DeleteRequested;
-            }
-
-            if (toolBar != null) {
-                toolBar.ConnectAllClicked += OnConnectAll;
-                toolBar.DisconnectAllClicked += OnDisconnectAll;
-                toolBar.RefreshClicked += OnRefresh;
-                toolBar.DeleteClicked += OnDeleteSelected;
-                toolBar.ConfirmDeleteClicked += OnConfirmDelete;
-                toolBar.CancelSelectClicked += OnCancelSelect;
-            }
+            if (toolBar != null)
+                toolBar.SetCount(_vm.DeviceCount);
 
             Unloaded += DevicePage_Unloaded;
         }
 
-        /// <summary>卸下页面时退订，避免泄漏。</summary>
-        private void DevicePage_Unloaded (object sender, RoutedEventArgs e) {
-            MyAppServices.Devices.Devices.CollectionChanged -= Devices_CollectionChanged;
+        // -------------------- ViewModel 事件 --------------------
 
-            if (toolBar != null) {
-                toolBar.ConnectAllClicked -= OnConnectAll;
-                toolBar.DisconnectAllClicked -= OnDisconnectAll;
-                toolBar.RefreshClicked -= OnRefresh;
-                toolBar.DeleteClicked -= OnDeleteSelected;
-                toolBar.ConfirmDeleteClicked -= OnConfirmDelete;
-                toolBar.CancelSelectClicked -= OnCancelSelect;
-            }
+        private void WireViewModel () {
+            _vm.RequestOpenAdd += () => ShowEditPanel(isNew: true, null);
+            _vm.RequestOpenEdit += info => ShowEditPanel(isNew: false, info);
+            _vm.RequestShowError += msg =>
+                MessageBox.Show(msg ?? "", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
 
-            Unloaded -= DevicePage_Unloaded;
-        }
-
-        private void Devices_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) =>
-            RebuildDisplayList();
-
-        /// <summary>重建展示列表；多选模式下布局完成后重新显示勾选框。</summary>
-        private void RebuildDisplayList () {
-            _displayList.Clear();
-
-            foreach (DeviceInfo d in MyAppServices.Devices.Devices)
-                _displayList.Add(d);
-
-            _displayList.Add(AddDeviceMarker.Instance);
-            RefreshCount();
-
-            if (_selectMode) {
-                Dispatcher.BeginInvoke(new Action(() => {
-                    ApplySelectModeToCards(true);
-                }), DispatcherPriority.Loaded);
-            }
-        }
-
-        private void RefreshCount () {
-            if (toolBar != null)
-                toolBar.SetCount(MyAppServices.Devices.Devices.Count);
-        }
-
-        private void SetSelectMode (bool on) {
-            _selectMode = on;
-            if (toolBar != null)
-                toolBar.SetSelectMode(on);
-            ApplySelectModeToCards(on);
-        }
-
-        private void ApplySelectModeToCards (bool on) {
-            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList))
-                card.SetSelectionMode(on);
-        }
-
-        private void OnDeleteSelected () {
-            if (!_selectMode)
-                SetSelectMode(true);
-        }
-
-        private void OnConfirmDelete () {
-            var ids = new List<string>();
-            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
-                if (card.IsSelected && card.Device != null && !string.IsNullOrEmpty(card.Device.Id))
-                    ids.Add(card.Device.Id);
-            }
-
-            foreach (string id in ids) {
-                try { MyAppServices.Devices.Remove(id); } catch { }
-            }
-
-            SetSelectMode(false);
-        }
-
-        private void OnCancelSelect () => SetSelectMode(false);
-
-        /// <summary>打开添加设备面板。</summary>
-        public void OpenAddDevice () {
-            DeviceInfo blank = new DeviceInfo
-            {
-                Name = "",
-                Model = "",
-                Protocol = "Modbus TCP"
+            // 数量变化：VM 重建列表后同步工具栏
+            _vm.PropertyChanged += (s, e) => {
+                if (e.PropertyName == nameof(DevicePageViewModel.DeviceCount) && toolBar != null)
+                    toolBar.SetCount(_vm.DeviceCount);
+                if (e.PropertyName == nameof(DevicePageViewModel.IsSelectMode) && toolBar != null)
+                    toolBar.SetSelectMode(_vm.IsSelectMode);
             };
-            editPanel.LoadData(blank, true);
-            ShowEditPopup();
         }
 
-        /// <summary>打开编辑设备面板。</summary>
-        public void OpenEditDevice (DeviceInfo info) {
-            if (info == null) return;
-            editPanel.LoadData(info, false);
-            ShowEditPopup();
+        private void WireToolbar () {
+            if (toolBar == null) return;
+
+            toolBar.ConnectAllClicked += () => {
+                if (_vm.ConnectAllCommand.CanExecute(null))
+                    _vm.ConnectAllCommand.Execute(null);
+            };
+            toolBar.DisconnectAllClicked += () => {
+                if (_vm.DisconnectAllCommand.CanExecute(null))
+                    _vm.DisconnectAllCommand.Execute(null);
+            };
+            toolBar.RefreshClicked += () => {
+                if (_vm.RefreshCommand.CanExecute(null))
+                    _vm.RefreshCommand.Execute(null);
+            };
+            toolBar.DeleteClicked += () => {
+                if (_vm.EnterSelectModeCommand.CanExecute(null))
+                    _vm.EnterSelectModeCommand.Execute(null);
+                ApplySelectModeToCards(true);
+            };
+            toolBar.ConfirmDeleteClicked += () => {
+                var ids = CollectSelectedIds();
+                if (_vm.ConfirmDeleteCommand.CanExecute(ids))
+                    _vm.ConfirmDeleteCommand.Execute(ids);
+                ApplySelectModeToCards(false);
+            };
+            toolBar.CancelSelectClicked += () => {
+                if (_vm.CancelSelectCommand.CanExecute(null))
+                    _vm.CancelSelectCommand.Execute(null);
+                ApplySelectModeToCards(false);
+            };
         }
 
-        /// <summary>显示遮罩与编辑面板（Visibility，随主窗口移动）。</summary>
-        private void ShowEditPopup () {
-            if (editPanel != null)
-                editPanel.Visibility = Visibility.Visible;
-            if (editOverlay != null)
-                editOverlay.Visibility = Visibility.Visible;
+        private void WireEditPanel () {
+            if (editPanel == null) return;
+            editPanel.CloseRequested += CloseEditPanel;
+            editPanel.SaveRequested += () => {
+                DeviceInfo info = editPanel.BuildDeviceInfo();
+                bool isNew = editPanel.IsNew;
+                _vm.SaveDevice(info, isNew);
+                CloseEditPanel();
+            };
+            editPanel.DeleteRequested += () => {
+                if (!editPanel.IsNew) {
+                    DeviceInfo info = editPanel.BuildDeviceInfo();
+                    if (info != null && !string.IsNullOrEmpty(info.Id))
+                        _vm.RemoveDevice(info.Id);
+                }
+                CloseEditPanel();
+            };
         }
 
-        /// <summary>关闭编辑面板并隐藏遮罩。</summary>
-        private void CloseEditPopup () {
+        // -------------------- 供卡片调用（保持原入口） --------------------
+
+        /// <summary>添加卡点击。</summary>
+        public void OpenAddDevice () => _vm.OpenAdd();
+
+        /// <summary>设备卡「编辑」。</summary>
+        public void OpenEditDevice (DeviceInfo info) => _vm.OpenEdit(info);
+
+        // -------------------- 弹层 --------------------
+
+        private void ShowEditPanel (bool isNew, DeviceInfo info) {
+            if (editPanel == null || editOverlay == null) return;
+
+            if (isNew)
+                editPanel.PrepareNew();
+            else
+                editPanel.Load(info);
+
+            editPanel.Visibility = Visibility.Visible;
+            editOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void CloseEditPanel () {
             if (editPanel != null)
                 editPanel.Visibility = Visibility.Collapsed;
             if (editOverlay != null)
                 editOverlay.Visibility = Visibility.Collapsed;
         }
 
-        /// <summary>点击遮罩空白处关闭。</summary>
-        private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
-            CloseEditPopup();
+        private void EditOverlay_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
+            // 点遮罩关闭；点面板内部不要关（面板需 e.Handled）
+            CloseEditPanel();
+        }
 
-        /// <summary>点击面板本身不关闭遮罩。</summary>
-        private void Panel_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
+        private void Panel_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
             e.Handled = true;
-
-        private void EditPanel_SaveRequested () {
-            DeviceInfo info = editPanel.BuildDeviceInfo();
-
-            if (string.IsNullOrWhiteSpace(info.Name) ||
-                string.IsNullOrWhiteSpace(info.Protocol)) {
-                CloseEditPopup();
-                return;
-            }
-
-            try {
-                if (editPanel.IsNew)
-                    MyAppServices.Devices.Add(info);
-                else
-                    MyAppServices.Devices.Update(info);
-            } catch { }
-
-            CloseEditPopup();
         }
 
-        private void EditPanel_DeleteRequested () {
-            DeviceInfo info = editPanel.BuildDeviceInfo();
-            if (!editPanel.IsNew && info != null && !string.IsNullOrEmpty(info.Id)) {
-                try { MyAppServices.Devices.Remove(info.Id); } catch { }
-            }
-            CloseEditPopup();
+        // -------------------- 多选 --------------------
+
+        private void ApplySelectModeToCards (bool selectMode) {
+            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList))
+                card.SetSelectMode(selectMode);
         }
 
-        private async void OnConnectAll () {
-            var list = MyAppServices.Devices.Devices
-                .Where(d => d != null && !d.IsConnected)
-                .ToList();
-
-            foreach (DeviceInfo d in list) {
-                d.StatusType = DeviceStatusType.Connecting;
-                d.IsConnected = false;
+        private List<string> CollectSelectedIds () {
+            var ids = new List<string>();
+            foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
+                if (card.IsSelected && card.Device != null && !string.IsNullOrEmpty(card.Device.Id))
+                    ids.Add(card.Device.Id);
             }
-
-            foreach (DeviceInfo d in list) {
-                try {
-                    await MyAppServices.Devices.ConnectAsync(d.Id, CancellationToken.None);
-                } catch {
-                    d.IsConnected = false;
-                    d.StatusType = DeviceStatusType.Error;
-                }
-            }
+            return ids;
         }
 
-        private void OnDisconnectAll () {
-            foreach (DeviceInfo d in MyAppServices.Devices.Devices.ToList()) {
-                if (d == null || string.IsNullOrEmpty(d.Id))
-                    continue;
-                MyAppServices.Devices.Disconnect(d.Id);
-            }
-        }
-
-        private void OnRefresh () {
-            MyAppServices.Devices.Load();
-            RebuildDisplayList();
+        private void DevicePage_Unloaded (object sender, RoutedEventArgs e) {
+            // 事件挂在 VM / 工具栏上的匿名委托随 Page 回收即可；
+            // 若后续 VM 实现 IDisposable，在此 Dispose。
         }
 
         private static IEnumerable<T> FindVisualChildren<T> (DependencyObject parent)
             where T : DependencyObject {
-            if (parent == null)
-                yield break;
-
+            if (parent == null) yield break;
             int count = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < count; i++) {
                 DependencyObject child = VisualTreeHelper.GetChild(parent, i);
                 T match = child as T;
                 if (match != null)
                     yield return match;
-
                 foreach (T nested in FindVisualChildren<T>(child))
                     yield return nested;
             }

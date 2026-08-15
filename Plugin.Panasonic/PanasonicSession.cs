@@ -47,8 +47,6 @@ namespace Plugin.Panasonic {
             }
         }
 
-
-
         public int TimeoutMs {
             get => _timeoutMs;
             set => _timeoutMs = value < 500 ? 500 : value;
@@ -116,6 +114,12 @@ namespace Plugin.Panasonic {
                 _stream.Flush();
                 return ReadLineCr();
             }
+        }
+
+        public void SetStation (int station) {
+            if (station < 0) station = 0;
+            if (station > 99) station = 99;
+            Station = station;
         }
 
         /// <summary>读到 CR 为止（不含 CR）。</summary>

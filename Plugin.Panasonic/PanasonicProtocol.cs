@@ -50,14 +50,6 @@ namespace Plugin.Panasonic {
                 return false;
             }
         }
-        /// <summary>
-        /// 由 Protocol 在 ConnectAsync 前写入，值来自 context.StationNo。
-        /// </summary>
-        public void SetStation (int station) {
-            if (station < 0) station = 0;
-            if (station > 99) station = 99;
-            Station = station;
-        }
 
         public void Disconnect () => _session.Disconnect();
 
