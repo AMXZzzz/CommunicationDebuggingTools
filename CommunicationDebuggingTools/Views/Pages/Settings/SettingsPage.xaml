@@ -24,7 +24,7 @@
 
                     <!-- 本地模式 -->
                     <RadioButton x:Name="rdoLocal"
-                                 Content="本地模式（直连 PLC，不需要 EngineHost）"
+                                 Content="本地模式（本机插件直连 PLC；可与 EngineHost 同时运行）"
                                  GroupName="mode"
                                  Checked="RdoLocal_Checked"
                                  Foreground="{StaticResource SF.Brush.Text.Primary}"
@@ -32,7 +32,7 @@
 
                     <!-- 远端模式 -->
                     <RadioButton x:Name="rdoRemote"
-                                 Content="远端模式（通过 EngineHost gRPC 连接）"
+                                 Content="远端优先（Host 可达走 gRPC；不可达自动回退本地）"
                                  GroupName="mode"
                                  Checked="RdoRemote_Checked"
                                  Foreground="{StaticResource SF.Brush.Text.Primary}"/>

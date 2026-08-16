@@ -67,15 +67,17 @@ namespace CommunicationDebuggingTools {
                 if (!hostOk) {
                     try {
                         MessageBox.Show(
-                            "无法连接 EngineHost：\n" + (ec.Address ?? "") +
-                            "\n\n请先启动 CommunicationDebuggingTools.EngineHost，\n" +
-                            "或在「系统设置」切换为本地模式后重启应用。",
-                            "远端模式",
+                            "当前优先远端，但无法连接 EngineHost：\n" + (ec.Address ?? "") +
+                            "\n\n已自动回退为【本地模式】（本机插件直连 PLC）。\n" +
+                            "可同时启动 EngineHost；连通后重启应用即可走远端。\n" +
+                            "仅本机调试时也可在设置中改为本地模式。",
+                            "连接模式",
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);
                     } catch { }
+                } else {
+                    try { ec.StartWatch(); } catch { }
                 }
-                try { ec.StartWatch(); } catch { }
             }
 
             // ③ 轮询引擎须在 UI 线程 Start（内部捕获 SynchronizationContext）
@@ -162,51 +164,23 @@ namespace CommunicationDebuggingTools {
             base.OnExit(e);
         }
 
-        // ── 服务注册（本地 / 远端双模式）───────────────
+        // ── 服务注册（本地始终可用 + 远端可选）─────────
+        /// <summary>
+        /// 统一容器：
+        /// - 本地 Business（插件/PLC）始终注册，可与 EngineHost 进程同时运行；
+        /// - EngineClient 始终注册（设置页可测连通）；
+        /// - RemoteMode=true 且 Host 可达 → UI 走远端；否则走本地（自动回退）。
+        /// </summary>
         private static IServiceProvider BuildServiceProvider () {
             var settings = AppSettings.Load();
-            return settings.RemoteMode
-                ? BuildRemoteProvider(settings)
-                : BuildLocalProvider();
-        }
-
-        /// <summary>
-        /// 远端模式：通过 EngineClient SDK 连接 EngineHost。
-        /// UI 只依赖 IDeviceService / IVariableService 接口，不知道 gRPC 存在。
-        /// 升级业务逻辑只需替换 CommunicationDebuggingTools.Client.dll。
-        /// </summary>
-        private static IServiceProvider BuildRemoteProvider (AppSettings settings) {
-            var sc = new ServiceCollection();
-
-            sc.AddSingleton<IAppLogger>(_ => new MemoryAppLogger(AppConfig.LogCapacity));
-
-            // EngineClient = SDK 唯一入口，Singleton，退出时 Dispose
-            sc.AddSingleton(_ => EngineClient.Connect(settings.HostAddress));
-
-            // 把 SDK 内的 IDeviceService/IVariableService 注册到容器
-            sc.AddSingleton<IDeviceService> (sp => sp.GetRequiredService<EngineClient>().Devices);
-            sc.AddSingleton<IVariableService>(sp => sp.GetRequiredService<EngineClient>().Variables);
-
-            // 轮询由 EngineHost 负责，本地不需要
-            sc.AddSingleton<IPollingEngine, NullPollingEngine>();
-
-            RegisterPages(sc);
-            return sc.BuildServiceProvider();
-        }
-
-        /// <summary>本地模式：直接使用 Business 层（原有逻辑）。</summary>
-        private static IServiceProvider BuildLocalProvider () {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var sc = new ServiceCollection();
 
-            // ── 基础设施 ──
             sc.AddSingleton<IAppLogger>(_ => new MemoryAppLogger(AppConfig.LogCapacity));
 
-            // ── 协议解析器 ──
             sc.AddSingleton<IProtocolResolver>(sp => {
                 string dir = Path.Combine(baseDir, "plugins");
                 var log = sp.GetRequiredService<IAppLogger>();
-                // 注入日志：单插件失败会 Warn，不再静默
                 var resolver = new ProtocolResolver(log);
                 resolver.LoadFromFolder(dir);
                 int n = resolver.GetProtocolNames()?.Count ?? 0;
@@ -214,23 +188,58 @@ namespace CommunicationDebuggingTools {
                 return resolver;
             });
 
-            // ── 持久化 ──
             sc.AddSingleton<IDeviceRepository>(_ =>
-                new JsonDeviceRepository(
-                    Path.Combine(baseDir, "config", "devices.json")));
+                new JsonDeviceRepository(Path.Combine(baseDir, "config", "devices.json")));
             sc.AddSingleton<IVariableRepository>(_ =>
-                new JsonVariableRepository(
-                    Path.Combine(baseDir, "config", "variables.json")));
+                new JsonVariableRepository(Path.Combine(baseDir, "config", "variables.json")));
 
-            // ── 业务服务（Singleton）──
             sc.AddSingleton<ITcpProbe, TcpProbe>();
-            sc.AddSingleton<IDeviceService, DeviceService>();
-            sc.AddSingleton<IVariableService, VariableService>();
-            sc.AddSingleton<IPollingEngine, PollingEngine>();
 
-            // ── ViewModels（Transient）──
+            // 本地实现（具体类型，避免与接口解析成环）
+            sc.AddSingleton<DeviceService>();
+            sc.AddSingleton(sp => new VariableService(
+                sp.GetRequiredService<DeviceService>(),
+                sp.GetRequiredService<IVariableRepository>(),
+                sp.GetRequiredService<IAppLogger>()));
+            sc.AddSingleton(sp => new PollingEngine(
+                sp.GetRequiredService<VariableService>(),
+                sp.GetRequiredService<DeviceService>(),
+                sp.GetRequiredService<IAppLogger>()));
+
+            // 远端客户端始终存在（与本地并行）
+            sc.AddSingleton(_ => EngineClient.Connect(settings.HostAddress));
+
+            bool preferRemote = settings.RemoteMode;
+
+            sc.AddSingleton<IDeviceService>(sp => {
+                if (preferRemote && IsHostReachable(sp))
+                    return sp.GetRequiredService<EngineClient>().Devices;
+                return sp.GetRequiredService<DeviceService>();
+            });
+            sc.AddSingleton<IVariableService>(sp => {
+                if (preferRemote && IsHostReachable(sp))
+                    return sp.GetRequiredService<EngineClient>().Variables;
+                return sp.GetRequiredService<VariableService>();
+            });
+            sc.AddSingleton<IPollingEngine>(sp => {
+                if (preferRemote && IsHostReachable(sp))
+                    return new NullPollingEngine();
+                return sp.GetRequiredService<PollingEngine>();
+            });
+
             RegisterPages(sc);
             return sc.BuildServiceProvider();
+        }
+
+        /// <summary>探测 EngineHost 是否可达。</summary>
+        private static bool IsHostReachable (IServiceProvider sp) {
+            try {
+                EngineClient ec = sp.GetRequiredService<EngineClient>();
+                return ec.PingAsync(CancellationToken.None)
+                    .ConfigureAwait(false).GetAwaiter().GetResult();
+            } catch {
+                return false;
+            }
         }
 
         private static void RegisterPages (ServiceCollection sc) {
