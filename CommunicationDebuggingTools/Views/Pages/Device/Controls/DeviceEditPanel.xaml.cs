@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Input;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
@@ -19,6 +20,11 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         public event Action DeleteRequested;
 
         private string _editingId;
+
+        private bool _dragging;
+        private Point _dragStart;
+        private double _originX;
+        private double _originY;
         private bool _isDual;
 
         /// <summary>编辑时保留原扩展 JSON，一期界面不改。</summary>
@@ -60,6 +66,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
         /// <summary>载入设备到表单。</summary>
         public void LoadData (DeviceInfo info, bool isNew) {
+            ResetPosition();
             if (info == null)
                 info = new DeviceInfo();
 
@@ -208,5 +215,61 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private void BtnClose_Click (object sender, MouseButtonEventArgs e) => CloseRequested?.Invoke();
         private void BtnSave_Click (object sender, RoutedEventArgs e) => SaveRequested?.Invoke();
         private void BtnDelete_Click (object sender, RoutedEventArgs e) => DeleteRequested?.Invoke();
+
+        /// <summary>打开弹窗时复位拖动偏移（回到遮罩居中）。</summary>
+        public void ResetPosition () {
+            if (panelTranslate != null) {
+                panelTranslate.X = 0;
+                panelTranslate.Y = 0;
+            }
+            _dragging = false;
+        }
+
+        /// <summary>标题栏按下：整条色块开始拖动（关闭按钮已被独立命中）。</summary>
+        private void TitleBar_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) {
+            if (e.ChangedButton != MouseButton.Left)
+                return;
+            // 点在关闭按钮上不拖
+            DependencyObject src = e.OriginalSource as DependencyObject;
+            while (src != null) {
+                if (src is Button)
+                    return;
+                src = VisualTreeHelper.GetParent(src);
+            }
+
+            _dragging = true;
+            _dragStart = e.GetPosition(null);
+            _originX = panelTranslate != null ? panelTranslate.X : 0;
+            _originY = panelTranslate != null ? panelTranslate.Y : 0;
+            titleBar.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void TitleBar_MouseMove (object sender, MouseEventArgs e) {
+            if (!_dragging || e.LeftButton != MouseButtonState.Pressed)
+                return;
+            Point p = e.GetPosition(null);
+            if (panelTranslate != null) {
+                panelTranslate.X = _originX + (p.X - _dragStart.X);
+                panelTranslate.Y = _originY + (p.Y - _dragStart.Y);
+            }
+        }
+
+        private void TitleBar_MouseLeftButtonUp (object sender, MouseButtonEventArgs e) {
+            StopDrag();
+        }
+
+        private void TitleBar_LostMouseCapture (object sender, MouseEventArgs e) {
+            StopDrag();
+        }
+
+        private void StopDrag () {
+            if (!_dragging)
+                return;
+            _dragging = false;
+            if (titleBar != null && titleBar.IsMouseCaptured)
+                titleBar.ReleaseMouseCapture();
+        }
+
     }
 }

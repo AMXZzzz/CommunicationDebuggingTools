@@ -9,16 +9,26 @@
             CornerRadius="10"
             ClipToBounds="True"
             SnapsToDevicePixels="True">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="panelTranslate" X="0" Y="0"/>
+        </Border.RenderTransform>
         <DockPanel>
-            <!-- ==================== 标题 ==================== -->
-            <Border DockPanel.Dock="Top"
+            <!-- ==================== 标题栏整条可拖动 ==================== -->
+            <Border x:Name="titleBar"
+                    DockPanel.Dock="Top"
                     Background="{StaticResource SF.Brush.Bg.Hover}"
                     CornerRadius="10,10,0,0"
                     Padding="14,12"
                     BorderThickness="0,0,0,1"
-                    BorderBrush="{StaticResource SF.Brush.Border.Default}">
+                    BorderBrush="{StaticResource SF.Brush.Border.Default}"
+                    Cursor="SizeAll"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                    MouseMove="TitleBar_MouseMove"
+                    MouseLeftButtonUp="TitleBar_MouseLeftButtonUp"
+                    LostMouseCapture="TitleBar_LostMouseCapture">
                 <Grid>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                IsHitTestVisible="False">
                         <Border Width="3" Height="16"
                                 Background="{StaticResource SF.Brush.Accent.Default}"
                                 CornerRadius="1"
@@ -30,6 +40,7 @@
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource SF.Brush.Text.Primary}"/>
                     </StackPanel>
+                    <!-- 关闭按钮单独接收点击，不参与拖动 -->
                     <Button Content="×"
                             Width="28" Height="28"
                             HorizontalAlignment="Right"
