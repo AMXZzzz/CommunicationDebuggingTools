@@ -21,6 +21,9 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
         public bool IsNew => string.IsNullOrEmpty(_editingId);
 
+        /// <summary>当前编辑中的变量 Id；新增模式为 null/空。</summary>
+        public string EditingId => _editingId;
+
         public VariableEditPanel () {
             InitializeComponent();
             RefreshDataTypeList();
