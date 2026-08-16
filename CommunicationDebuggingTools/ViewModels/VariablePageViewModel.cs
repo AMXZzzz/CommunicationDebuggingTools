@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -7,7 +7,6 @@ using CommunicationDebuggingTools.Business.Variable;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Logging;
-using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.ViewModels {
 
