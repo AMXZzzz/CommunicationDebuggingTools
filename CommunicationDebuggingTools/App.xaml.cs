@@ -15,6 +15,7 @@ using CommunicationDebuggingTools.Business.Plugins;
 using CommunicationDebuggingTools.Business.Device;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
@@ -37,6 +38,20 @@ namespace CommunicationDebuggingTools {
         private IPollingEngine _pollingEngine;
         private IAppLogger _log;
         private CancellationTokenSource _remoteProbeCts;
+        private bool _remoteWatchStarted;
+        private bool _lastRemoteConnected;
+        private bool _shouldStartRemoteWatch;
+        private bool _canAutoManageEngineHost;
+        private DateTimeOffset? _remoteOfflineSince;
+        private DateTimeOffset _lastHostStartAttemptAt = DateTimeOffset.MinValue;
+        private Process _engineHostProcess;
+
+        private static readonly TimeSpan EngineHostRestartAfter = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan EngineHostStartRetryInterval = TimeSpan.FromSeconds(10);
+
+        public static event Action<bool> RemoteConnectionChanged;
+
+        public static bool IsRemoteConnected { get; private set; }
 
         // ── 启动 ─────────────────────────────────────
         protected override void OnStartup (StartupEventArgs e) {
@@ -56,7 +71,10 @@ namespace CommunicationDebuggingTools {
             mainWindow.Show();
 
             // ③ 初始化（Load 与构造分离）；缓存单例，退出/心跳不再走已释放的 Services
-            bool remoteMode = AppSettings.Load().RemoteMode;
+            var settings = AppSettings.Load();
+            bool remoteMode = settings.RemoteMode;
+            _shouldStartRemoteWatch = remoteMode;
+            _canAutoManageEngineHost = CanAutoManageEngineHost(settings.HostAddress);
             _deviceService = Services.GetRequiredService<IDeviceService>();
             var varSvc = Services.GetRequiredService<IVariableService>();
 
@@ -75,8 +93,17 @@ namespace CommunicationDebuggingTools {
             _heartbeat.Tick += Heartbeat_Tick;
             _heartbeat.Start();
 
-            // Remote 模式：后台探测连通后再启动 Watch。
-            if (remoteMode && Services.GetService(typeof(EngineClient)) is EngineClient ec) {
+            // 无论本地/远端模式，都后台探测 EngineHost 在线状态并发布到 UI。
+            if (Services.GetService(typeof(EngineClient)) is EngineClient ec) {
+                _lastRemoteConnected = false;
+                _remoteOfflineSince = DateTimeOffset.UtcNow;
+                NotifyRemoteConnectionChanged(false);
+
+                // WPF 启动时先尝试拉起本机 EngineHost（仅本机地址场景）。
+                if (_canAutoManageEngineHost) {
+                    TryStartEngineHostProcess();
+                }
+
                 _remoteProbeCts = new CancellationTokenSource();
                 StartRemoteWatchInBackground(ec, _remoteProbeCts.Token);
             }
@@ -136,6 +163,14 @@ namespace CommunicationDebuggingTools {
                 _remoteProbeCts?.Dispose();
             } catch { }
             _remoteProbeCts = null;
+            _remoteWatchStarted = false;
+            _lastRemoteConnected = false;
+            _remoteOfflineSince = null;
+
+            try {
+                _engineHostProcess?.Dispose();
+            } catch { }
+            _engineHostProcess = null;
 
             try { _pollingEngine?.Stop(); } catch { }
             // Remote 模式：停止 Watch 流
@@ -228,19 +263,53 @@ namespace CommunicationDebuggingTools {
         private void StartRemoteWatchInBackground (EngineClient client, CancellationToken ct) {
             _ = Task.Run(async () => {
                 while (!ct.IsCancellationRequested) {
+                    bool connected = false;
                     try {
-                        bool ok = await client.PingAsync(ct).ConfigureAwait(false);
-                        if (ok) {
-                            await Dispatcher.InvokeAsync(() => {
-                                try { client.StartWatch(); } catch { }
-                            });
-                            try { _log?.Info("App", "远端 EngineHost 已连通，已启动 Watch"); } catch { }
-                            return;
-                        }
+                        connected = await client.PingAsync(ct).ConfigureAwait(false);
                     } catch (OperationCanceledException) {
                         return;
                     } catch {
-                        // 后台重试，不阻塞 UI
+                        connected = false;
+                    }
+
+                    if (connected) {
+                        _remoteOfflineSince = null;
+                        if (!_lastRemoteConnected) {
+                            _lastRemoteConnected = true;
+                            NotifyRemoteConnectionChanged(true);
+                            await Dispatcher.InvokeAsync(() => {
+                                try {
+                                    if (_shouldStartRemoteWatch && !_remoteWatchStarted) {
+                                        client.StartWatch();
+                                        _remoteWatchStarted = true;
+                                    }
+                                } catch { }
+                            });
+                            try { _log?.Info("App", "远端 EngineHost 已连通"); } catch { }
+                        }
+                    } else {
+                        if (_remoteOfflineSince == null)
+                            _remoteOfflineSince = DateTimeOffset.UtcNow;
+
+                        if (_lastRemoteConnected) {
+                            _lastRemoteConnected = false;
+                            NotifyRemoteConnectionChanged(false);
+                            await Dispatcher.InvokeAsync(() => {
+                                try {
+                                    if (_remoteWatchStarted) {
+                                        client.StopWatch();
+                                        _remoteWatchStarted = false;
+                                    }
+                                } catch { }
+                            });
+                            try { _log?.Info("App", "远端 EngineHost 已断开，等待重连"); } catch { }
+                        }
+
+                        if (_canAutoManageEngineHost &&
+                            _remoteOfflineSince.Value + EngineHostRestartAfter <= DateTimeOffset.UtcNow &&
+                            _lastHostStartAttemptAt + EngineHostStartRetryInterval <= DateTimeOffset.UtcNow) {
+                            TryStartEngineHostProcess();
+                        }
                     }
 
                     try {
@@ -250,6 +319,73 @@ namespace CommunicationDebuggingTools {
                     }
                 }
             }, ct);
+        }
+
+        private bool CanAutoManageEngineHost (string hostAddress) {
+            if (string.IsNullOrWhiteSpace(hostAddress)) return true;
+            if (!Uri.TryCreate(hostAddress, UriKind.Absolute, out var uri)) return false;
+            return uri.IsLoopback ||
+                   string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void TryStartEngineHostProcess () {
+            _lastHostStartAttemptAt = DateTimeOffset.UtcNow;
+
+            try {
+                if (_engineHostProcess != null && !_engineHostProcess.HasExited)
+                    return;
+            } catch {
+                // 进程句柄不可用时重新拉起
+            }
+
+            try {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string debugExe = Path.GetFullPath(Path.Combine(baseDir,
+                    @"..\..\..\..\CommunicationDebuggingTools.EngineHost\bin\Debug\net8.0\CommunicationDebuggingTools.EngineHost.exe"));
+                string releaseExe = Path.GetFullPath(Path.Combine(baseDir,
+                    @"..\..\..\..\CommunicationDebuggingTools.EngineHost\bin\Release\net8.0\CommunicationDebuggingTools.EngineHost.exe"));
+                string debugDll = Path.GetFullPath(Path.Combine(baseDir,
+                    @"..\..\..\..\CommunicationDebuggingTools.EngineHost\bin\Debug\net8.0\CommunicationDebuggingTools.EngineHost.dll"));
+                string releaseDll = Path.GetFullPath(Path.Combine(baseDir,
+                    @"..\..\..\..\CommunicationDebuggingTools.EngineHost\bin\Release\net8.0\CommunicationDebuggingTools.EngineHost.dll"));
+
+                ProcessStartInfo psi = null;
+                string launchDirectory = baseDir;
+                if (File.Exists(debugExe)) {
+                    psi = new ProcessStartInfo(debugExe);
+                    launchDirectory = Path.GetDirectoryName(debugExe) ?? baseDir;
+                } else if (File.Exists(releaseExe)) {
+                    psi = new ProcessStartInfo(releaseExe);
+                    launchDirectory = Path.GetDirectoryName(releaseExe) ?? baseDir;
+                } else if (File.Exists(debugDll)) {
+                    psi = new ProcessStartInfo("dotnet", "\"" + debugDll + "\"");
+                    launchDirectory = Path.GetDirectoryName(debugDll) ?? baseDir;
+                } else if (File.Exists(releaseDll)) {
+                    psi = new ProcessStartInfo("dotnet", "\"" + releaseDll + "\"");
+                    launchDirectory = Path.GetDirectoryName(releaseDll) ?? baseDir;
+                }
+
+                if (psi == null) {
+                    _log?.Error("App", "自动拉起 EngineHost 失败：未找到可执行文件");
+                    return;
+                }
+
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.WorkingDirectory = launchDirectory;
+
+                _engineHostProcess?.Dispose();
+                _engineHostProcess = Process.Start(psi);
+                _log?.Info("App", "已尝试自动拉起 EngineHost");
+            } catch (Exception ex) {
+                _log?.Error("App", "自动拉起 EngineHost 异常", ex);
+            }
+        }
+
+        private static void NotifyRemoteConnectionChanged (bool connected) {
+            IsRemoteConnected = connected;
+            try { RemoteConnectionChanged?.Invoke(connected); } catch { }
         }
 
         private static void RegisterPages (ServiceCollection sc) {

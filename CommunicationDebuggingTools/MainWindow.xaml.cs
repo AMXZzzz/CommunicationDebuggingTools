@@ -4,6 +4,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace CommunicationDebuggingTools {
 
@@ -21,6 +22,9 @@ namespace CommunicationDebuggingTools {
 
             if (navSidebar != null)
                 navSidebar.NavigateRequested += NavigateTo;
+
+            Loaded += MainWindow_Loaded;
+            Closed += MainWindow_Closed;
 
             // 默认页：MES 监控
             NavigateTo(typeof(Views.Pages.Monitor.DataMonitorPage));
@@ -43,6 +47,28 @@ namespace CommunicationDebuggingTools {
                         ?.Error("Nav", "打开页面失败: " + pageType.Name, ex);
                 } catch { }
                 MessageBox.Show("打开页面失败:\n" + ex.Message, "导航错误");
+            }
+        }
+
+        private void MainWindow_Loaded (object sender, RoutedEventArgs e) {
+            App.RemoteConnectionChanged += OnRemoteConnectionChanged;
+            UpdateRemoteStatus(App.IsRemoteConnected);
+        }
+
+        private void MainWindow_Closed (object sender, EventArgs e) {
+            App.RemoteConnectionChanged -= OnRemoteConnectionChanged;
+        }
+
+        private void OnRemoteConnectionChanged (bool connected) {
+            Dispatcher.Invoke(() => UpdateRemoteStatus(connected));
+        }
+
+        private void UpdateRemoteStatus (bool connected) {
+            if (txtStatus != null) txtStatus.Text = connected ? "EngineHost在线" : "EngineHost离线";
+            if (statusIndicator != null) {
+                statusIndicator.Fill = connected
+                    ? Brushes.LimeGreen
+                    : (FindResource("SF.Brush.Text.Secondary") as Brush);
             }
         }
 
