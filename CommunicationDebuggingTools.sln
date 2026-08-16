@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.10.12106.202 insiders
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.Core", "CommunicationDebuggingTools.Core\CommunicationDebuggingTools.Core.csproj", "{80A3D4A2-C795-4DC6-9A2C-A13397241885}"
 EndProject
@@ -20,7 +20,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.EngineHost", "CommunicationDebuggingTools.EngineHost\CommunicationDebuggingTools.EngineHost.csproj", "{E2222222-2222-2222-2222-222222222222}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.Client", "CommunicationDebuggingTools.Client\\CommunicationDebuggingTools.Client.csproj", "{B4889BB3-C5B2-40DE-B746-431E24A99908}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.Client", "CommunicationDebuggingTools.Client\CommunicationDebuggingTools.Client.csproj", "{B4889BB3-C5B2-40DE-B746-431E24A99908}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -64,7 +64,12 @@ Global
 		{E2222222-2222-2222-2222-222222222222}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E2222222-2222-2222-2222-222222222222}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E2222222-2222-2222-2222-222222222222}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B4889BB3-C5B2-40DE-B746-431E24A99908}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4889BB3-C5B2-40DE-B746-431E24A99908}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4889BB3-C5B2-40DE-B746-431E24A99908}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4889BB3-C5B2-40DE-B746-431E24A99908}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
-EndProject("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.Client", "CommunicationDebuggingTools.Client\\CommunicationDebuggingTools.Client.csproj", "{B4889BB3-C5B2-40DE-B746-431E24A99908}"
-EndProject
-Global
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -92,7 +92,7 @@ namespace CommunicationDebuggingTools.Client {
                     ? CoreOp.Ok
                     : CoreOp.ProtocolError(resp?.Result?.Message ?? "读失败");
             } catch (OperationCanceledException) { return CoreOp.Cancelled; }
-            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, OperationErrorCode.ProtocolError); }
+            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, CommunicationDebuggingTools.Core.Enums.OperationErrorCode.ProtocolError); }
         }
 
         public async Task<CoreOp> WriteAsync (string variableId, object value, CancellationToken ct) {
@@ -105,7 +105,7 @@ namespace CommunicationDebuggingTools.Client {
                     ? CoreOp.Ok
                     : CoreOp.ProtocolError(resp?.Result?.Message ?? "写失败");
             } catch (OperationCanceledException) { return CoreOp.Cancelled; }
-            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, OperationErrorCode.ProtocolError); }
+            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, CommunicationDebuggingTools.Core.Enums.OperationErrorCode.ProtocolError); }
         }
 
         public async Task ReadByDeviceAsync (string deviceId, CancellationToken ct) {
