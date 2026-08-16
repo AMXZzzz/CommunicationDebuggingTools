@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,6 +26,12 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         public VariableTable () {
             InitializeComponent();
             listRows.ItemsSource = _rows;
+            Unloaded += (s, e) => DetachAllRows();
+        }
+
+        private void DetachAllRows () {
+            foreach (Row r in _rows)
+                r.Detach();
         }
 
         public void Load (string deviceId) {
@@ -64,6 +71,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             if (string.IsNullOrEmpty(id)) return;
             foreach (Row r in _rows) {
                 if (r.Id == id) {
+                    r.ClearWriteDirty();
                     WriteRequested?.Invoke(id, r.WriteText ?? "");
                     return;
                 }
@@ -71,6 +79,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         }
 
         private void Rebuild () {
+            DetachAllRows();
             _rows.Clear();
             int all = 0, read = 0, write = 0, status = 0, data = 0;
 
@@ -135,21 +144,57 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             return null;
         }
 
-        private sealed class Row {
+        /// <summary>
+        /// 行视图模型：订阅 VariableItem.LastValue，轮询读回后刷新界面。
+        /// </summary>
+        private sealed class Row : INotifyPropertyChanged {
+            public event PropertyChangedEventHandler PropertyChanged;
+
+            private VariableItem _source;
+            private string _valueText;
+            private string _writeText;
+            private bool _writeDirty;
+
             public string Id { get; set; }
             public int Index { get; set; }
             public string Name { get; set; }
             public string Address { get; set; }
             public string DataType { get; set; }
             public string AccessText { get; set; }
-            public string ValueText { get; set; }
-            public string WriteText { get; set; }
             public string UnitText { get; set; }
             public string Category { get; set; }
             public string Description { get; set; }
             public Visibility ValueTextVisibility { get; set; }
             public Visibility WriteEditorVisibility { get; set; }
             public Visibility DescToolTipVisibility { get; set; }
+
+            public string ValueText {
+                get { return _valueText; }
+                set {
+                    if (_valueText == value) return;
+                    _valueText = value;
+                    Raise(nameof(ValueText));
+                }
+            }
+
+            public string WriteText {
+                get { return _writeText; }
+                set {
+                    if (_writeText == value) return;
+                    _writeText = value;
+                    _writeDirty = true;
+                    Raise(nameof(WriteText));
+                }
+            }
+
+            public void ClearWriteDirty () { _writeDirty = false; }
+
+            public void Detach () {
+                if (_source != null) {
+                    _source.PropertyChanged -= OnSourcePropertyChanged;
+                    _source = null;
+                }
+            }
 
             public static Row From (VariableItem v, int index) {
                 string access = "R/W";
@@ -159,16 +204,16 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 bool canWrite = v.Access == VariableAccess.WriteOnly
                              || v.Access == VariableAccess.ReadWrite;
                 string desc = v.Description ?? "";
+                string val = v.LastValue != null ? v.LastValue.ToString() : "—";
+                string write = v.LastValue != null ? v.LastValue.ToString() : "";
 
-                return new Row {
+                var row = new Row {
                     Id = v.Id,
                     Index = index,
                     Name = v.Name ?? "",
                     Address = v.Address ?? "",
                     DataType = v.DataType.ToString(),
                     AccessText = access,
-                    ValueText = v.LastValue != null ? v.LastValue.ToString() : "—",
-                    WriteText = v.LastValue != null ? v.LastValue.ToString() : "",
                     UnitText = string.IsNullOrWhiteSpace(v.Unit) ? "—" : v.Unit,
                     Category = string.IsNullOrWhiteSpace(v.Category) ? "—" : v.Category,
                     Description = desc,
@@ -177,6 +222,42 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                     DescToolTipVisibility = string.IsNullOrWhiteSpace(desc)
                         ? Visibility.Collapsed : Visibility.Visible
                 };
+                row._valueText = val;
+                row._writeText = write;
+                row._writeDirty = false;
+                row._source = v;
+                v.PropertyChanged += row.OnSourcePropertyChanged;
+                return row;
+            }
+
+            private void OnSourcePropertyChanged (object sender, PropertyChangedEventArgs e) {
+                if (e == null) return;
+                if (e.PropertyName != nameof(VariableItem.LastValue) && e.PropertyName != "LastValue")
+                    return;
+
+                VariableItem v = _source;
+                if (v == null) return;
+
+                Action apply = () => {
+                    string text = v.LastValue != null ? v.LastValue.ToString() : "—";
+                    ValueText = text;
+                    if (!_writeDirty) {
+                        _writeText = v.LastValue != null ? v.LastValue.ToString() : "";
+                        Raise(nameof(WriteText));
+                    }
+                };
+
+                var d = Application.Current != null ? Application.Current.Dispatcher : null;
+                if (d != null && !d.CheckAccess())
+                    d.BeginInvoke(apply);
+                else
+                    apply();
+            }
+
+            private void Raise (string name) {
+                PropertyChangedEventHandler h = PropertyChanged;
+                if (h != null)
+                    h(this, new PropertyChangedEventArgs(name));
             }
         }
     }

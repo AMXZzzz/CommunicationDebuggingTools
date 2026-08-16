@@ -23,6 +23,9 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
         public ObservableCollection<VariableItem> Variables { get; private set; }
 
+        /// <summary>UI 同步上下文（构造时在 UI 线程捕获），用于回写 LastValue。</summary>
+        private readonly SynchronizationContext _uiCtx;
+
         public VariableService (
             IDeviceService devices,
             IVariableRepository repository,
@@ -33,6 +36,8 @@ namespace CommunicationDebuggingTools.Business.Variable {
             _repository = repository;
             _log = logger;
             Variables = new ObservableCollection<VariableItem>();
+            // App 在 UI 线程 BuildServiceProvider，此处可拿到 DispatcherSynchronizationContext
+            _uiCtx = SynchronizationContext.Current;
         }
 
         // ── 持久化 ──────────────────────────────────
@@ -119,15 +124,13 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError);
             }
 
-            v.LastError = result.ErrorMessage ?? string.Empty;
-            v.Quality = result.Quality;
-
             if (result.Success) {
-                v.LastValue = result.Value;
+                ApplyLive(v, result.Value, result.Quality, result.ErrorMessage ?? string.Empty);
                 _devices.ReportCommSuccess(v.DeviceId);
                 return OperationResult.Ok;
             }
 
+            SetBad(v, result.ErrorMessage ?? "协议返回失败");
             LogError("读失败: " + v.Name + " — " + result.ErrorMessage);
             _devices.ReportCommError(v.DeviceId);
             CheckAndMarkDisconnected(v.DeviceId);
@@ -172,15 +175,13 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError);
             }
 
-            v.LastError = result.ErrorMessage ?? string.Empty;
             if (result.Success) {
-                v.LastValue = value;
-                v.Quality = DataQuality.Good;
+                ApplyLive(v, value, DataQuality.Good, string.Empty);
                 _devices.ReportCommSuccess(v.DeviceId);
                 return OperationResult.Ok;
             }
 
-            v.Quality = DataQuality.Bad;
+            SetBad(v, result.ErrorMessage ?? "协议返回失败");
             LogError("写失败: " + v.Name + " — " + result.ErrorMessage);
             _devices.ReportCommError(v.DeviceId);
             CheckAndMarkDisconnected(v.DeviceId);
@@ -225,9 +226,24 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 Value = writeValue
             };
 
-        private static void SetBad (VariableItem v, string msg) {
-            v.LastError = msg;
-            v.Quality = DataQuality.Bad;
+        /// <summary>
+        /// 在 UI 线程回写实时字段，保证 WPF 绑定与变量表快照订阅能收到通知。
+        /// </summary>
+        private void ApplyLive (VariableItem v, object lastValue, DataQuality quality, string lastError) {
+            if (v == null) return;
+            Action apply = () => {
+                v.LastValue = lastValue;
+                v.Quality = quality;
+                v.LastError = lastError ?? string.Empty;
+            };
+            if (_uiCtx != null)
+                _uiCtx.Post(_ => apply(), null);
+            else
+                apply();
+        }
+
+        private void SetBad (VariableItem v, string msg) {
+            ApplyLive(v, v != null ? v.LastValue : null, DataQuality.Bad, msg ?? string.Empty);
         }
 
         private void CheckAndMarkDisconnected (string deviceId) {
