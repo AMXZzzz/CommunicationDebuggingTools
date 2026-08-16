@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Simulator MEWTOCOL Slave", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.Web", "CommunicationDebuggingTools.Web\CommunicationDebuggingTools.Web.csproj", "{FF965E28-4509-4DE0-9348-84F6242EF742}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommunicationDebuggingTools.WebUI", "CommunicationDebuggingTools.WebUI\CommunicationDebuggingTools.WebUI.csproj", "{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -181,6 +183,18 @@ Global
 		{FF965E28-4509-4DE0-9348-84F6242EF742}.Release|x64.Build.0 = Release|Any CPU
 		{FF965E28-4509-4DE0-9348-84F6242EF742}.Release|x86.ActiveCfg = Release|Any CPU
 		{FF965E28-4509-4DE0-9348-84F6242EF742}.Release|x86.Build.0 = Release|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Debug|x64.Build.0 = Debug|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Debug|x86.Build.0 = Debug|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Release|x64.ActiveCfg = Release|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Release|x64.Build.0 = Release|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Release|x86.ActiveCfg = Release|Any CPU
+		{58E3CCF0-5A55-459D-9F0E-399F07B2EA1F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

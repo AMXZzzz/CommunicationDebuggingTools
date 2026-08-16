@@ -1,0 +1,44 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject Services.EngineGateway Gateway
+@inject Services.WebUiSettingsStore SettingsStore
+
+<div class="shell">
+    <aside class="shell-sidebar">
+        <NavMenu />
+    </aside>
+
+    <main class="shell-main">
+        <header class="shell-header">
+            <div class="brand">Communication Debugging Tools</div>
+            <div class="status @(Gateway.IsConnected ? "online" : "offline")">
+                @(Gateway.IsConnected ? "EngineHost在线" : "EngineHost离线")
+            </div>
+        </header>
+
+        <section class="shell-content">
+            @Body
+        </section>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    发生未处理异常。
+    <a href="." class="reload">重新加载</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync () {
+        Gateway.StateChanged += OnGatewayStateChanged;
+        await Gateway.InitializeAsync(SettingsStore.Load().HostAddress);
+    }
+
+    public void Dispose () {
+        Gateway.StateChanged -= OnGatewayStateChanged;
+    }
+
+    private void OnGatewayStateChanged () {
+        _ = InvokeAsync(StateHasChanged);
+    }
+}

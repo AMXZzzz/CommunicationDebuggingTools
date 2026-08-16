@@ -1,0 +1,355 @@
+@page "/"
+@page "/devices"
+@implements IDisposable
+@inject Services.EngineGateway Gateway
+
+<PageTitle>设备管理</PageTitle>
+
+<h3>设备管理</h3>
+<div class="card-panel">
+    <div class="btn-row" style="margin-bottom:12px;">
+        <button class="primary" @onclick="OpenAddDialog">新增设备</button>
+        <button class="success" @onclick="ConnectAllAsync">全部连接</button>
+        <button class="danger" @onclick="DisconnectAllAsync">全部断开</button>
+        <button @onclick="RefreshAsync">刷新</button>
+        @if (!_isSelectMode) {
+            <button @onclick="EnterSelectMode">批量删除</button>
+        } else {
+            <button @onclick="CancelSelectMode">取消多选</button>
+            <button class="danger" @onclick="ConfirmBatchDelete">删除选中（@_selectedIds.Count）</button>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_notice)) {
+        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")" style="margin-bottom:10px;">@_notice</div>
+    }
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                @if (_isSelectMode) {
+                    <th style="width:42px;">选</th>
+                }
+                <th>名称</th>
+                <th>协议</th>
+                <th>地址</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var d in Gateway.Devices) {
+                <tr>
+                    @if (_isSelectMode) {
+                        <td>
+                            <input type="checkbox"
+                                   checked="@_selectedIds.Contains(d.Id)"
+                                   @onchange="args => ToggleSelect(d.Id, args)" />
+                        </td>
+                    }
+                    <td>@d.Name</td>
+                    <td>@d.Protocol</td>
+                    <td>@d.Ip:@d.Port</td>
+                    <td class="@(d.IsConnected ? "ok" : "error")">@(d.IsConnected ? "已连接" : "未连接")</td>
+                    <td>
+                        <div class="btn-row">
+                            <button @onclick="() => Edit(d)">编辑</button>
+                            @if (d.IsConnected) {
+                                <button @onclick="() => DisconnectAsync(d.Id)">断开</button>
+                            } else {
+                                <button class="success" @onclick="() => ConnectAsync(d.Id)">连接</button>
+                            }
+                            <button class="danger" @onclick="() => ConfirmSingleDelete(d.Id)">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (_showEditDialog) {
+    <div class="overlay">
+        <div class="dialog-panel dialog-edit">
+            <h4>@(_editingId == null ? "新增设备" : "编辑设备")</h4>
+            <div class="grid-2" style="margin-bottom:12px;">
+                <div class="field">
+                    <label>名称</label>
+                    <input @bind="_editor.Name" />
+                </div>
+                <div class="field">
+                    <label>协议</label>
+                    <input @bind="_editor.Protocol" placeholder="例如 Modbus TCP" />
+                </div>
+                <div class="field">
+                    <label>型号</label>
+                    <input @bind="_editor.Model" />
+                </div>
+                <div class="field">
+                    <label>IP</label>
+                    <input @bind="_editor.Ip" />
+                </div>
+                <div class="field">
+                    <label>端口</label>
+                    <input type="number" @bind="_editor.Port" />
+                </div>
+                <div class="field">
+                    <label>站号</label>
+                    <input type="number" @bind="_editor.StationNo" />
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="primary" @onclick="SaveAsync">@(_editingId == null ? "新增设备" : "保存修改")</button>
+                <button @onclick="CloseEditDialog">取消</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showDeleteConfirm) {
+    <div class="overlay">
+        <div class="dialog-panel">
+            <h4>删除确认</h4>
+            <p>@_deleteMessage</p>
+            <div class="btn-row">
+                <button class="danger" @onclick="DeleteConfirmedAsync">确认删除</button>
+                <button @onclick="CloseDeleteDialog">取消</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DeviceEditor _editor = new();
+    private string _editingId;
+    private string _notice;
+    private bool _noticeIsError;
+
+    private bool _isSelectMode;
+    private readonly HashSet<string> _selectedIds = new(StringComparer.OrdinalIgnoreCase);
+    private bool _showEditDialog;
+    private bool _showDeleteConfirm;
+    private bool _deleteIsBatch;
+    private string _deleteId;
+    private string _deleteMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync () {
+        Gateway.StateChanged += OnGatewayStateChanged;
+        await Gateway.RefreshNowAsync();
+    }
+
+    public void Dispose () {
+        Gateway.StateChanged -= OnGatewayStateChanged;
+    }
+
+    private async Task SaveAsync () {
+        ClearNotice();
+        try {
+            if (string.IsNullOrWhiteSpace(_editor.Name) || string.IsNullOrWhiteSpace(_editor.Protocol)) {
+                SetError("名称和协议不能为空");
+                return;
+            }
+
+            var entity = _editor.ToEntity(_editingId);
+            if (string.IsNullOrWhiteSpace(_editingId)) {
+                await Gateway.AddDeviceAsync(entity);
+                SetOk("新增设备成功");
+            } else {
+                await Gateway.UpdateDeviceAsync(entity);
+                SetOk("保存设备成功");
+            }
+            CloseEditDialog();
+            await Gateway.RefreshNowAsync();
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private void OpenAddDialog () {
+        _editingId = null;
+        _editor = new DeviceEditor();
+        _showEditDialog = true;
+    }
+
+    private void Edit (CommunicationDebuggingTools.Core.Models.DeviceInfo d) {
+        _editingId = d.Id;
+        _editor = DeviceEditor.From(d);
+        _showEditDialog = true;
+    }
+
+    private void CloseEditDialog () {
+        _editingId = null;
+        _editor = new DeviceEditor();
+        _showEditDialog = false;
+    }
+
+    private void EnterSelectMode () {
+        _isSelectMode = true;
+        _selectedIds.Clear();
+    }
+
+    private void CancelSelectMode () {
+        _isSelectMode = false;
+        _selectedIds.Clear();
+    }
+
+    private void ToggleSelect (string id, ChangeEventArgs args) {
+        bool isChecked = args.Value is bool b && b;
+        if (isChecked) {
+            _selectedIds.Add(id);
+        } else {
+            _selectedIds.Remove(id);
+        }
+    }
+
+    private void ConfirmSingleDelete (string id) {
+        _deleteIsBatch = false;
+        _deleteId = id;
+        _deleteMessage = "确认删除该设备？";
+        _showDeleteConfirm = true;
+    }
+
+    private void ConfirmBatchDelete () {
+        if (_selectedIds.Count == 0) {
+            SetError("请先选择要删除的设备");
+            return;
+        }
+        _deleteIsBatch = true;
+        _deleteId = null;
+        _deleteMessage = $"确认删除选中的 {_selectedIds.Count} 台设备？";
+        _showDeleteConfirm = true;
+    }
+
+    private async Task DeleteConfirmedAsync () {
+        ClearNotice();
+        try {
+            if (_deleteIsBatch) {
+                var ids = _selectedIds.ToList();
+                foreach (var id in ids) {
+                    await Gateway.RemoveDeviceAsync(id);
+                }
+                _selectedIds.Clear();
+                _isSelectMode = false;
+                SetOk("批量删除完成");
+            } else if (!string.IsNullOrWhiteSpace(_deleteId)) {
+                await Gateway.RemoveDeviceAsync(_deleteId);
+                SetOk("删除设备成功");
+            }
+
+            CloseDeleteDialog();
+            await Gateway.RefreshNowAsync();
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private void CloseDeleteDialog () {
+        _showDeleteConfirm = false;
+        _deleteId = null;
+        _deleteMessage = string.Empty;
+    }
+
+    private async Task ConnectAsync (string id) {
+        ClearNotice();
+        try {
+            bool ok = await Gateway.ConnectDeviceAsync(id);
+            SetNotice(ok ? "设备连接成功" : "设备连接失败", !ok);
+            await Gateway.RefreshNowAsync();
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private async Task DisconnectAsync (string id) {
+        ClearNotice();
+        try {
+            await Gateway.DisconnectDeviceAsync(id);
+            SetOk("设备已断开");
+            await Gateway.RefreshNowAsync();
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private async Task ConnectAllAsync () {
+        ClearNotice();
+        try {
+            await Gateway.ConnectAllAsync();
+            SetOk("已执行全部连接");
+            await Gateway.RefreshNowAsync();
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private async Task DisconnectAllAsync () {
+        ClearNotice();
+        try {
+            await Gateway.DisconnectAllAsync();
+            SetOk("已执行全部断开");
+            await Gateway.RefreshNowAsync();
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private async Task RefreshAsync () {
+        ClearNotice();
+        try {
+            await Gateway.RefreshNowAsync();
+            SetOk("刷新完成");
+        } catch (Exception ex) {
+            SetError(ex.Message);
+        }
+    }
+
+    private void OnGatewayStateChanged () {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void SetOk (string msg) => SetNotice(msg, false);
+    private void SetError (string msg) => SetNotice(msg, true);
+    private void SetNotice (string msg, bool isError) {
+        _notice = msg;
+        _noticeIsError = isError;
+    }
+    private void ClearNotice () {
+        _notice = null;
+        _noticeIsError = false;
+    }
+
+    private sealed class DeviceEditor {
+        public string Name { get; set; } = "";
+        public string Protocol { get; set; } = "Modbus TCP";
+        public string Model { get; set; } = "";
+        public string Ip { get; set; } = "127.0.0.1";
+        public int Port { get; set; } = 502;
+        public int StationNo { get; set; } = 1;
+
+        public CommunicationDebuggingTools.Core.Models.DeviceInfo ToEntity (string id) {
+            return new CommunicationDebuggingTools.Core.Models.DeviceInfo {
+                Id = id ?? Guid.NewGuid().ToString("N"),
+                Name = Name?.Trim() ?? string.Empty,
+                Protocol = Protocol?.Trim() ?? string.Empty,
+                Model = Model?.Trim() ?? string.Empty,
+                Ip = Ip?.Trim() ?? string.Empty,
+                Port = Port,
+                StationNo = StationNo,
+                ExtraSettingsJson = "{}"
+            };
+        }
+
+        public static DeviceEditor From (CommunicationDebuggingTools.Core.Models.DeviceInfo d) {
+            return new DeviceEditor {
+                Name = d.Name,
+                Protocol = d.Protocol,
+                Model = d.Model,
+                Ip = d.Ip,
+                Port = d.Port,
+                StationNo = d.StationNo
+            };
+        }
+    }
+}

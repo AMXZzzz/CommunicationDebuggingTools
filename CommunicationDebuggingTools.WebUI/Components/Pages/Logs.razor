@@ -1,0 +1,50 @@
+@page "/logs"
+@implements IDisposable
+@inject Services.EngineGateway Gateway
+
+<PageTitle>日志</PageTitle>
+
+<h3>日志</h3>
+<div class="card-panel">
+    <div class="btn-row" style="margin-bottom:12px;">
+        <button @onclick="RefreshAsync">刷新</button>
+    </div>
+
+    <div class="small" style="margin-bottom:8px;">
+        EngineHost 状态：
+        <span class="@(Gateway.IsConnected ? "ok" : "error")">@(Gateway.IsConnected ? "在线" : "离线")</span>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>日志内容</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var line in Gateway.Logs.Reverse()) {
+                <tr><td>@line</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized () {
+        Gateway.StateChanged += OnGatewayStateChanged;
+    }
+
+    public void Dispose () {
+        Gateway.StateChanged -= OnGatewayStateChanged;
+    }
+
+    private async Task RefreshAsync () {
+        await Gateway.RefreshNowAsync();
+    }
+
+    private void OnGatewayStateChanged () {
+        _ = InvokeAsync(StateHasChanged);
+    }
+}

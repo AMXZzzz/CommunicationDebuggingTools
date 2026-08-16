@@ -1,0 +1,57 @@
+@page "/settings"
+@inject Services.EngineGateway Gateway
+@inject Services.WebUiSettingsStore SettingsStore
+
+<PageTitle>设置</PageTitle>
+
+<h3>设置</h3>
+<div class="card-panel" style="max-width:760px;">
+    <div class="field" style="margin-bottom:12px;">
+        <label>EngineHost 地址</label>
+        <input @bind="_hostAddress" placeholder="http://127.0.0.1:5100" />
+    </div>
+
+    <div class="btn-row" style="margin-bottom:12px;">
+        <button class="primary" @onclick="SaveAndReconnectAsync">保存并重连</button>
+        <button @onclick="TestAsync">测试连接</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message)) {
+        <div class="@(_ok ? "ok" : "error")">@_message</div>
+    }
+</div>
+
+@code {
+    private string _hostAddress = "http://127.0.0.1:5100";
+    private string _message;
+    private bool _ok;
+
+    protected override void OnInitialized () {
+        _hostAddress = SettingsStore.Load().HostAddress;
+    }
+
+    private async Task SaveAndReconnectAsync () {
+        try {
+            SettingsStore.Save(new Services.WebUiSettings {
+                HostAddress = _hostAddress
+            });
+            await Gateway.ReconnectAsync(_hostAddress);
+            _ok = Gateway.IsConnected;
+            _message = _ok ? "已保存并重连成功" : "已保存，但当前未连接到 EngineHost";
+        } catch (Exception ex) {
+            _ok = false;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task TestAsync () {
+        try {
+            await Gateway.ReconnectAsync(_hostAddress);
+            _ok = Gateway.IsConnected;
+            _message = _ok ? "连接成功" : "连接失败";
+        } catch (Exception ex) {
+            _ok = false;
+            _message = ex.Message;
+        }
+    }
+}
