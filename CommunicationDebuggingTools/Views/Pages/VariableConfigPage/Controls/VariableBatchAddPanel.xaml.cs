@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -103,7 +103,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             private int _index;
             private string _name = "";
             private string _address = "";
-            private VariableDataType _dataType = VariableDataType.Int16;
+            private VariableDataType _dataType = VariableDataType.Bool;
             private string _accessText = "R/W";
             private string _unit = "";
             private string _category = "状态点";
@@ -141,7 +141,17 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
             public string Category {
                 get => _category;
-                set { _category = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Category))); }
+                set {
+                    if (_category == value) return;
+                    _category = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Category)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DataTypeOptions)));
+                    // 状态点仅 Bool
+                    if (_category == "状态点" && _dataType != VariableDataType.Bool)
+                        DataType = VariableDataType.Bool;
+                    else if (_category != "状态点" && _dataType == VariableDataType.Bool)
+                        DataType = VariableDataType.Int16;
+                }
             }
 
             public string Description {
@@ -149,8 +159,19 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 set { _description = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Description))); }
             }
 
-            public IList<VariableDataType> DataTypeOptions { get; } =
-                Enum.GetValues(typeof(VariableDataType)).Cast<VariableDataType>().ToList();
+            public IList<VariableDataType> DataTypeOptions {
+                get {
+                    if (_category == "状态点")
+                        return new[] { VariableDataType.Bool };
+                    return new[] {
+                        VariableDataType.Int16, VariableDataType.UInt16,
+                        VariableDataType.Int32, VariableDataType.UInt32,
+                        VariableDataType.Int64, VariableDataType.UInt64,
+                        VariableDataType.Float, VariableDataType.Double,
+                        VariableDataType.String
+                    };
+                }
+            }
 
             public IList<string> AccessOptions { get; } =
                 new[] { "R", "W", "R/W" };

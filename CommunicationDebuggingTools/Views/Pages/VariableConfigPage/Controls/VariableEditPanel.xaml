@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="CommunicationDebuggingTools.Views.VariableConfigPage.Controls.VariableEditPanel"
+<UserControl x:Class="CommunicationDebuggingTools.Views.VariableConfigPage.Controls.VariableEditPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="460">
@@ -108,7 +108,7 @@
                     </TextBlock>
                     <TextBox x:Name="txtAddress" FontFamily="Consolas"
                              Style="{StaticResource SF.Style.DialogTextBox}"/>
-                    <TextBlock Text="支持 Siemens DB、Modbus 寄存器、位地址等格式"
+                    <TextBlock Text="地址由所选协议解释：状态点用位地址（如 R10A、M0.0）；数值/字符串用字地址（如 DT100、DB1.DBW0）"
                                FontSize="11" Margin="0,4,0,0"
                                Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -7,49 +7,32 @@ using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
     /// <summary>
-    /// 变量添加/编辑弹层。
-    /// 通过 Close / Save / Delete / Info 事件将意图交给页面处理
+    /// 添加/编辑变量弹层。
+    /// 分类决定可选数据类型：状态点仅 Bool；监控/轨道宽度为数值与字符串。
     /// </summary>
     public partial class VariableEditPanel : UserControl {
-        /// <summary>关闭弹层（不保存）。</summary>
         public event Action CloseRequested;
-
-        /// <summary>保存当前表单。</summary>
         public event Action SaveRequested;
-
-        /// <summary>删除当前编辑中的变量（仅编辑模式）。</summary>
         public event Action DeleteRequested;
-
-        /// <summary>校验失败等提示：(标题, 正文)，由页面用 AppMessageDialog 展示。</summary>
-        public event Action<string, string> InfoRequested;
 
         private string _editingId;
         private VariableAccess _access = VariableAccess.ReadOnly;
         private string _category = "状态点";
 
-        /// <summary>是否新增。</summary>
         public bool IsNew => string.IsNullOrEmpty(_editingId);
-
-        /// <summary>编辑中的变量 Id；新增为 null。</summary>
-        public string EditingId => _editingId;
 
         public VariableEditPanel () {
             InitializeComponent();
-
-            cmbDataType.Items.Clear();
-            foreach (VariableDataType t in Enum.GetValues(typeof(VariableDataType)))
-                cmbDataType.Items.Add(t);
-            cmbDataType.SelectedItem = VariableDataType.Int16;
-
+            RefreshDataTypeList();
             UpdateAccessButtons();
             UpdateCategoryButtons();
         }
 
-        /// <summary>切换为新增并清空表单。</summary>
         public void PrepareNew () {
             _editingId = null;
             txtTitle.Text = "添加变量";
-            btnSave.Content = "添加";
+            if (btnSave != null)
+                btnSave.Content = "添加";
             if (btnDelete != null)
                 btnDelete.Visibility = Visibility.Collapsed;
 
@@ -57,15 +40,13 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             txtAddress.Text = "";
             txtUnit.Text = "";
             txtDesc.Text = "";
-            cmbDataType.SelectedItem = VariableDataType.Int16;
-
             _access = VariableAccess.ReadOnly;
             _category = "状态点";
             UpdateAccessButtons();
             UpdateCategoryButtons();
+            RefreshDataTypeList(preferred: VariableDataType.Bool);
         }
 
-        /// <summary>切换为编辑并填充字段。</summary>
         public void Load (VariableItem v) {
             if (v == null) {
                 PrepareNew();
@@ -74,7 +55,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
 
             _editingId = v.Id;
             txtTitle.Text = "编辑变量";
-            btnSave.Content = "保存";
+            if (btnSave != null)
+                btnSave.Content = "保存";
             if (btnDelete != null)
                 btnDelete.Visibility = Visibility.Visible;
 
@@ -82,31 +64,30 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             txtAddress.Text = v.Address ?? "";
             txtUnit.Text = v.Unit ?? "";
             txtDesc.Text = v.Description ?? "";
-            cmbDataType.SelectedItem = v.DataType;
-
             _access = v.Access;
             _category = string.IsNullOrEmpty(v.Category) ? "状态点" : v.Category;
             UpdateAccessButtons();
             UpdateCategoryButtons();
+            RefreshDataTypeList(preferred: v.DataType);
         }
 
-        /// <summary>收集表单；校验失败返回 null。</summary>
         public VariableItem Build () {
-            string name = (txtName.Text ?? "").Trim();
-            string address = (txtAddress.Text ?? "").Trim();
-            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(address)) {
-                InfoRequested?.Invoke("提示", "显示名称和地址不能为空");
+            if (string.IsNullOrWhiteSpace(txtName.Text) ||
+                string.IsNullOrWhiteSpace(txtAddress.Text))
                 return null;
-            }
+
+            VariableDataType dt = VariableDataType.Bool;
+            if (cmbDataType.SelectedItem is VariableDataType selected)
+                dt = selected;
+            else if (_category != "状态点")
+                dt = VariableDataType.Int16;
 
             var item = new VariableItem {
-                Name = name,
-                Address = address,
+                Name = (txtName.Text ?? "").Trim(),
+                Address = (txtAddress.Text ?? "").Trim(),
                 Unit = (txtUnit.Text ?? "").Trim(),
                 Description = (txtDesc.Text ?? "").Trim(),
-                DataType = cmbDataType.SelectedItem is VariableDataType dt
-                    ? dt
-                    : VariableDataType.Int16,
+                DataType = dt,
                 Access = _access,
                 Category = _category
             };
@@ -115,6 +96,47 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 item.Id = _editingId;
 
             return item;
+        }
+
+        /// <summary>
+        /// 按当前分类填充数据类型列表。
+        /// 状态点：仅 Bool；其余：数值 + 浮点 + 字符串（不含 Bool，避免状态与数值混用）。
+        /// </summary>
+        private void RefreshDataTypeList (VariableDataType? preferred = null) {
+            if (cmbDataType == null)
+                return;
+
+            VariableDataType[] allowed = GetAllowedDataTypes(_category);
+            object keep = preferred.HasValue
+                ? (object)preferred.Value
+                : cmbDataType.SelectedItem;
+
+            cmbDataType.Items.Clear();
+            foreach (VariableDataType t in allowed)
+                cmbDataType.Items.Add(t);
+
+            if (keep is VariableDataType kd && Array.IndexOf(allowed, kd) >= 0)
+                cmbDataType.SelectedItem = kd;
+            else
+                cmbDataType.SelectedItem = allowed[0];
+        }
+
+        private static VariableDataType[] GetAllowedDataTypes (string category) {
+            if (category == "状态点")
+                return new[] { VariableDataType.Bool };
+
+            // 监控数据 / 轨道宽度：可读写数值与字符串
+            return new[] {
+                VariableDataType.Int16,
+                VariableDataType.UInt16,
+                VariableDataType.Int32,
+                VariableDataType.UInt32,
+                VariableDataType.Int64,
+                VariableDataType.UInt64,
+                VariableDataType.Float,
+                VariableDataType.Double,
+                VariableDataType.String
+            };
         }
 
         private void BtnAccess_Click (object sender, RoutedEventArgs e) {
@@ -133,22 +155,29 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             if (!string.IsNullOrEmpty(tag))
                 _category = tag;
             UpdateCategoryButtons();
+            RefreshDataTypeList();
         }
 
         private void UpdateAccessButtons () {
             Style dark = TryFindResource("SF.Style.DarkButton") as Style;
             Style primary = TryFindResource("SF.Style.PrimaryButton") as Style;
-            btnAccR.Style = _access == VariableAccess.ReadOnly ? primary : dark;
-            btnAccW.Style = _access == VariableAccess.WriteOnly ? primary : dark;
-            btnAccRW.Style = _access == VariableAccess.ReadWrite ? primary : dark;
+            if (btnAccR != null)
+                btnAccR.Style = _access == VariableAccess.ReadOnly ? primary : dark;
+            if (btnAccW != null)
+                btnAccW.Style = _access == VariableAccess.WriteOnly ? primary : dark;
+            if (btnAccRW != null)
+                btnAccRW.Style = _access == VariableAccess.ReadWrite ? primary : dark;
         }
 
         private void UpdateCategoryButtons () {
             Style dark = TryFindResource("SF.Style.DarkButton") as Style;
             Style primary = TryFindResource("SF.Style.PrimaryButton") as Style;
-            btnCatStatus.Style = _category == "状态点" ? primary : dark;
-            btnCatData.Style = _category == "监控数据" ? primary : dark;
-            btnCatWidth.Style = _category == "轨道宽度" ? primary : dark;
+            if (btnCatStatus != null)
+                btnCatStatus.Style = _category == "状态点" ? primary : dark;
+            if (btnCatData != null)
+                btnCatData.Style = _category == "监控数据" ? primary : dark;
+            if (btnCatWidth != null)
+                btnCatWidth.Style = _category == "轨道宽度" ? primary : dark;
         }
 
         private void BtnClose_Click (object sender, RoutedEventArgs e) =>
