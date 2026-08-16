@@ -141,7 +141,7 @@ namespace CommunicationDebuggingTools.EngineHost.Services {
             var resp = new ReadVariableResponse();
             if (string.IsNullOrWhiteSpace(req?.Id)) { resp.Result = Fail("id 为空","INVALID_ARGUMENT"); return resp; }
             try {
-                CoreOp op = await _variables.ReadAsync(req.Id, ctx.CancellationToken).ConfigureAwait(false);
+                var op = await _variables.ReadAsync(req.Id, ctx.CancellationToken).ConfigureAwait(false);
                 var v = FindVariable(req.Id); if (v != null) resp.Variable = ToDto(v);
                 resp.Result = op?.Success == true ? Ok() : Fail(op?.ErrorMessage ?? "读失败", op?.ErrorCode.ToString() ?? "READ_FAILED");
             } catch (Exception ex) { resp.Result = Fail(ex.Message,"READ_FAILED"); }
@@ -152,7 +152,7 @@ namespace CommunicationDebuggingTools.EngineHost.Services {
             var resp = new WriteVariableResponse();
             if (string.IsNullOrWhiteSpace(req?.Id)) { resp.Result = Fail("id 为空","INVALID_ARGUMENT"); return resp; }
             try {
-                CoreOp op = await _variables.WriteAsync(req.Id, req.Value ?? "", ctx.CancellationToken).ConfigureAwait(false);
+                var op = await _variables.WriteAsync(req.Id, req.Value ?? "", ctx.CancellationToken).ConfigureAwait(false);
                 var v = FindVariable(req.Id); if (v != null) resp.Variable = ToDto(v);
                 resp.Result = op?.Success == true ? Ok() : Fail(op?.ErrorMessage ?? "写失败", op?.ErrorCode.ToString() ?? "WRITE_FAILED");
             } catch (Exception ex) { resp.Result = Fail(ex.Message,"WRITE_FAILED"); }
