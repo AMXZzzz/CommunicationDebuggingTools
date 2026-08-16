@@ -1,6 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Web.Script.Serialization;
+using System;
+using System.Text.Json;
 
 namespace CommunicationDebuggingTools.Core.Tools {
 
@@ -16,29 +15,23 @@ namespace CommunicationDebuggingTools.Core.Tools {
                 return defaultValue;
 
             try {
-                var ser = new JavaScriptSerializer();
-                var dict = ser.Deserialize<Dictionary<string, object>>(json);
-                if (dict == null || dict.Count == 0)
-                    return defaultValue;
+                using (JsonDocument doc = JsonDocument.Parse(json)) {
+                    if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                        return defaultValue;
 
-                object raw = null;
-                foreach (KeyValuePair<string, object> kv in dict) {
-                    if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase)) {
-                        raw = kv.Value;
-                        break;
+                    foreach (JsonProperty prop in doc.RootElement.EnumerateObject()) {
+                        if (!string.Equals(prop.Name, key, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        JsonElement v = prop.Value;
+                        if (v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n))
+                            return n;
+                        if (v.ValueKind == JsonValueKind.String &&
+                            int.TryParse(v.GetString(), out int p))
+                            return p;
+                        return defaultValue;
                     }
                 }
-
-                if (raw == null)
-                    return defaultValue;
-                if (raw is int)
-                    return (int)raw;
-                if (raw is long)
-                    return (int)(long)raw;
-
-                int v;
-                if (int.TryParse(Convert.ToString(raw), out v))
-                    return v;
             } catch {
             }
 

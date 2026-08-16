@@ -1,27 +1,30 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Web.Script.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Business.Persistence {
     /// <summary>
-    /// 本地 JSON 设备仓储。
-    /// 文件格式 version=1：{ "version":1, "devices":[ ... ] }。
-    /// 兼容旧版根数组；加载时忽略未知字段；运行时状态不落盘（由 DeviceService 复位）。
+    /// 本地 JSON 设备仓储（System.Text.Json / net8）。
+    /// 文件格式 version=1：{ "version":1, "devices":[ ... ] }；兼容旧版根数组。
     /// </summary>
     public class JsonDeviceRepository : IDeviceRepository {
         public const int CurrentVersion = 1;
 
         private readonly string _filePath;
-        private readonly JavaScriptSerializer _serializer = new JavaScriptSerializer();
+        private static readonly JsonSerializerOptions WriteOptions = new JsonSerializerOptions {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
 
         public JsonDeviceRepository (string filePath) {
             if (string.IsNullOrWhiteSpace(filePath))
-                throw new ArgumentException("路径不能为空", "filePath");
+                throw new ArgumentException("路径不能为空", nameof(filePath));
             _filePath = filePath;
         }
 
@@ -56,12 +59,18 @@ namespace CommunicationDebuggingTools.Business.Persistence {
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
+            var list = new List<DeviceDto>();
+            foreach (DeviceInfo d in devices) {
+                if (d == null) continue;
+                list.Add(ToDto(d));
+            }
+
             var doc = new DeviceFileDocument {
                 version = CurrentVersion,
-                devices = new List<DeviceInfo>(devices)
+                devices = list
             };
-            string json = _serializer.Serialize(doc);
 
+            string json = JsonSerializer.Serialize(doc, WriteOptions);
             string tempPath = _filePath + ".tmp";
             try {
                 File.WriteAllText(tempPath, json);
@@ -69,122 +78,134 @@ namespace CommunicationDebuggingTools.Business.Persistence {
                     File.Delete(_filePath);
                 File.Move(tempPath, _filePath);
             } catch (Exception ex) {
-                Trace.TraceError("保存设备配置失败: {0}", ex.Message);
-                try {
-                    if (File.Exists(tempPath))
-                        File.Delete(tempPath);
-                } catch { }
+                Trace.TraceWarning("保存设备配置失败: {0}", ex.Message);
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
         }
 
-        /// <summary>
-        /// 支持：根数组（旧）或 { version, devices }（新）。
-        /// </summary>
-        private IList<DeviceInfo> ParseDocument (string json) {
-            object root = _serializer.DeserializeObject(json);
-            if (root == null)
-                return new List<DeviceInfo>();
+        private static IList<DeviceInfo> ParseDocument (string json) {
+            using (JsonDocument doc = JsonDocument.Parse(json)) {
+                JsonElement root = doc.RootElement;
+                var result = new List<DeviceInfo>();
 
-            // 旧格式：数组
-            if (root is object[] arr) {
-                return MapArray(arr);
-            }
-
-            // 新格式：字典
-            if (root is Dictionary<string, object> map) {
-                object devicesObj;
-                if (!map.TryGetValue("devices", out devicesObj) || devicesObj == null)
-                    return new List<DeviceInfo>();
-                if (devicesObj is object[] devicesArr)
-                    return MapArray(devicesArr);
-                // 有时反序列化为 ArrayList
-                if (devicesObj is ArrayList list) {
-                    var tmp = new object[list.Count];
-                    list.CopyTo(tmp);
-                    return MapArray(tmp);
+                if (root.ValueKind == JsonValueKind.Array) {
+                    foreach (JsonElement el in root.EnumerateArray()) {
+                        DeviceInfo d = FromElement(el);
+                        if (d != null) result.Add(d);
+                    }
+                    return result;
                 }
-            }
 
-            return new List<DeviceInfo>();
+                if (root.ValueKind == JsonValueKind.Object) {
+                    if (root.TryGetProperty("devices", out JsonElement arr) &&
+                        arr.ValueKind == JsonValueKind.Array) {
+                        foreach (JsonElement el in arr.EnumerateArray()) {
+                            DeviceInfo d = FromElement(el);
+                            if (d != null) result.Add(d);
+                        }
+                    }
+                }
+
+                return result;
+            }
         }
 
-        private IList<DeviceInfo> MapArray (object[] arr) {
-            var result = new List<DeviceInfo>();
-            if (arr == null) return result;
-            foreach (object item in arr) {
-                DeviceInfo d = MapDevice(item as Dictionary<string, object>);
-                if (d != null)
-                    result.Add(d);
-            }
-            return result;
-        }
-
-        /// <summary>
-        /// 手工映射，忽略 ProtocolSettingsJson / UnitId 等历史字段。
-        /// </summary>
-        private static DeviceInfo MapDevice (Dictionary<string, object> m) {
-            if (m == null) return null;
+        private static DeviceInfo FromElement (JsonElement el) {
+            if (el.ValueKind != JsonValueKind.Object)
+                return null;
 
             var d = new DeviceInfo();
-            d.Id = GetString(m, "Id") ?? Guid.NewGuid().ToString("N");
-            d.Name = GetString(m, "Name") ?? "新设备";
-            d.Model = GetString(m, "Model") ?? "";
-            d.Protocol = GetString(m, "Protocol") ?? "";
-            d.Ip = GetString(m, "Ip") ?? "";
-            d.Port = GetInt(m, "Port", 502);
-            d.StationNo = GetInt(m, "StationNo", GetInt(m, "UnitId", 1));
-            d.ExtraSettingsJson = GetString(m, "ExtraSettingsJson");
+            d.Id = GetString(el, "Id") ?? Guid.NewGuid().ToString("N");
+            d.Name = GetString(el, "Name") ?? "新设备";
+            d.Model = GetString(el, "Model") ?? "";
+            d.Protocol = GetString(el, "Protocol") ?? "";
+            d.Ip = GetString(el, "Ip") ?? "";
+            d.Port = GetInt(el, "Port", 502);
+            d.StationNo = GetInt(el, "StationNo", GetInt(el, "UnitId", 1));
+            d.ExtraSettingsJson = GetString(el, "ExtraSettingsJson");
             if (string.IsNullOrWhiteSpace(d.ExtraSettingsJson))
                 d.ExtraSettingsJson = "{}";
 
-            // 不恢复 IsConnected / StatusType —— 由业务层 ResetRuntimeState
             d.IsConnected = false;
-            d.StatusType = CommunicationDebuggingTools.Core.Enums.DeviceStatusType.Offline;
+            d.StatusType = DeviceStatusType.Offline;
 
             int lane;
-            if (TryGetInt(m, "Lane", out lane))
-                d.Lane = (CommunicationDebuggingTools.Core.Enums.LaneType)lane;
-
+            if (TryGetInt(el, "Lane", out lane))
+                d.Lane = (LaneType)lane;
             int bo;
-            if (TryGetInt(m, "ByteOrder", out bo))
-                d.ByteOrder = (CommunicationDebuggingTools.Core.Enums.ByteOrder)bo;
+            if (TryGetInt(el, "ByteOrder", out bo))
+                d.ByteOrder = (ByteOrder)bo;
             int wo;
-            if (TryGetInt(m, "WordOrder", out wo))
-                d.WordOrder = (CommunicationDebuggingTools.Core.Enums.WordOrder)wo;
+            if (TryGetInt(el, "WordOrder", out wo))
+                d.WordOrder = (WordOrder)wo;
             int se;
-            if (TryGetInt(m, "StringEncoding", out se))
-                d.StringEncoding = (CommunicationDebuggingTools.Core.Enums.StringEncodingKind)se;
+            if (TryGetInt(el, "StringEncoding", out se))
+                d.StringEncoding = (StringEncodingKind)se;
 
             return d;
         }
 
-        private static string GetString (Dictionary<string, object> m, string key) {
-            object v;
-            if (!m.TryGetValue(key, out v) || v == null) return null;
-            return Convert.ToString(v);
+        private static DeviceDto ToDto (DeviceInfo d) {
+            return new DeviceDto {
+                Id = d.Id,
+                Name = d.Name,
+                Model = d.Model,
+                Protocol = d.Protocol,
+                Ip = d.Ip,
+                Port = d.Port,
+                StationNo = d.StationNo,
+                ExtraSettingsJson = d.ExtraSettingsJson ?? "{}",
+                Lane = (int)d.Lane,
+                ByteOrder = (int)d.ByteOrder,
+                WordOrder = (int)d.WordOrder,
+                StringEncoding = (int)d.StringEncoding
+            };
         }
 
-        private static int GetInt (Dictionary<string, object> m, string key, int defaultValue) {
+        private static string GetString (JsonElement el, string name) {
+            if (!el.TryGetProperty(name, out JsonElement p))
+                return null;
+            if (p.ValueKind == JsonValueKind.String)
+                return p.GetString();
+            if (p.ValueKind == JsonValueKind.Null || p.ValueKind == JsonValueKind.Undefined)
+                return null;
+            return p.ToString();
+        }
+
+        private static int GetInt (JsonElement el, string name, int def) {
             int v;
-            return TryGetInt(m, key, out v) ? v : defaultValue;
+            return TryGetInt(el, name, out v) ? v : def;
         }
 
-        private static bool TryGetInt (Dictionary<string, object> m, string key, out int value) {
+        private static bool TryGetInt (JsonElement el, string name, out int value) {
             value = 0;
-            object v;
-            if (!m.TryGetValue(key, out v) || v == null) return false;
-            try {
-                value = Convert.ToInt32(v);
-                return true;
-            } catch {
+            if (!el.TryGetProperty(name, out JsonElement p))
                 return false;
-            }
+            if (p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out value))
+                return true;
+            if (p.ValueKind == JsonValueKind.String && int.TryParse(p.GetString(), out value))
+                return true;
+            return false;
         }
 
-        /// <summary>落盘文档结构（version + devices）。</summary>
         public class DeviceFileDocument {
             public int version { get; set; }
-            public List<DeviceInfo> devices { get; set; }
+            public List<DeviceDto> devices { get; set; }
+        }
+
+        public class DeviceDto {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public string Model { get; set; }
+            public string Protocol { get; set; }
+            public string Ip { get; set; }
+            public int Port { get; set; }
+            public int StationNo { get; set; }
+            public string ExtraSettingsJson { get; set; }
+            public int Lane { get; set; }
+            public int ByteOrder { get; set; }
+            public int WordOrder { get; set; }
+            public int StringEncoding { get; set; }
         }
     }
 }
