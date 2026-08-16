@@ -1,10 +1,12 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CommunicationDebuggingTools.Core.Attributes;
+﻿using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Core.Tools;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Plugin.Panasonic {
     /// <summary>
@@ -37,7 +39,7 @@ namespace Plugin.Panasonic {
 
             try {
                 int port = context.Port > 0 ? context.Port : 9094;
-                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : AppConfig.DefaultTimeoutMs;
                 await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken)
                     .ConfigureAwait(false);
                 return true;
@@ -72,13 +74,13 @@ namespace Plugin.Panasonic {
                     return Task.FromResult(request);
                 }
 
-                int wordCount = Tools.WordsNeeded(
+                int wordCount = ProtocolCodecTools.WordsNeeded(
                     request.DataType, request.Length, request.StringEncoding);
                 string rdResp = _session.Transact("RD" + FormatDataRange(addr, wordCount));
                 EnsureNoError(rdResp);
 
                 ushort[] data = ParseDataWords(rdResp, wordCount);
-                request.Value = Tools.FromWords(
+                request.Value = ProtocolCodecTools.FromWords(
                     data,
                     request.DataType,
                     request.WordOrder,
@@ -109,7 +111,7 @@ namespace Plugin.Panasonic {
                 PanasonicAddress addr = PanasonicSession.ParseAddress(request.Address);
 
                 if (addr.IsBit) {
-                    bool bit = Tools.ToBool(request.Value);
+                    bool bit = ProtocolCodecTools.ToBool(request.Value);
                     string cmd = "WCS" + PanasonicSession.FormatContact(addr) + (bit ? "1" : "0");
                     string resp = _session.Transact(cmd);
                     EnsureNoError(resp);
@@ -119,7 +121,7 @@ namespace Plugin.Panasonic {
                     return Task.FromResult(request);
                 }
 
-                ushort[] words = Tools.ToWords(
+                ushort[] words = ProtocolCodecTools.ToWords(
                     request.Value,
                     request.DataType,
                     request.Length,
@@ -130,7 +132,7 @@ namespace Plugin.Panasonic {
                 var sb = new System.Text.StringBuilder();
                 sb.Append("WD").Append(FormatDataRange(addr, words.Length));
                 for (int i = 0; i < words.Length; i++)
-                    sb.Append(Tools.SwapBytes(words[i]).ToString("X4"));
+                    sb.Append(ProtocolCodecTools.SwapBytes(words[i]).ToString("X4"));
 
                 string wdResp = _session.Transact(sb.ToString());
                 EnsureNoError(wdResp);
@@ -218,7 +220,7 @@ namespace Plugin.Panasonic {
                 ushort raw = ushort.Parse(
                     h.Substring(i * 4, 4),
                     System.Globalization.NumberStyles.HexNumber);
-                words[i] = Tools.SwapBytes(raw);
+                words[i] = ProtocolCodecTools.SwapBytes(raw);
             }
             return words;
         }

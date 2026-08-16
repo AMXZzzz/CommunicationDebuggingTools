@@ -4,12 +4,16 @@ using System.Globalization;
 using System.Text;
 using CommunicationDebuggingTools.Core.Enums;
 
-namespace Plugin.Panasonic {
+namespace CommunicationDebuggingTools.Core.Tools {
     /// <summary>
     /// MEWTOCOL 插件共用工具：字序/字节序、字符串编码、数值拆合。
     /// 不含网络与报文收发。
     /// </summary>
-    internal static class Tools {
+    /// <summary>
+    /// 协议编解码公共工具：字序/字节序转换、字符串编码、数值拆合。
+    /// 与协议无关，供所有插件共用；不含网络与报文收发逻辑。
+    /// </summary>
+    public static class ProtocolCodecTools {
         /// <summary>字内字节交换（逻辑值 ↔ 线上低字节在前）。</summary>
         public static ushort SwapBytes (ushort w) {
             return (ushort)((w << 8) | (w >> 8));

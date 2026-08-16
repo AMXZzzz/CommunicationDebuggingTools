@@ -70,5 +70,9 @@ namespace CommunicationDebuggingTools.Core.Interfaces {
         /// 必须在 UI 线程（如 DispatcherTimer 回调）中调用，避免跨线程更新绑定属性。
         /// </summary>
         void CheckConnections ();
+
+        void ReportCommSuccess (string deviceId);
+        void ReportCommError (string deviceId);
+
     }
 }

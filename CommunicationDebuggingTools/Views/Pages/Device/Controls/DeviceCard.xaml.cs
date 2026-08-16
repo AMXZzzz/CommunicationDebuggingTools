@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CommunicationDebuggingTools.Core.Enums;
-using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Views.Pages.Device {
@@ -23,10 +22,14 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
         private DeviceInfo _subscribed;
 
         /// <summary>
-        /// 设备业务服务（连接 / 断开）。
-        /// 由 DevicePage 在创建卡片或列表重建后赋值。
+        /// 连接委托（由 DevicePage 注入）：(deviceId, token) → Task。
+        /// Card 不持有 IDeviceService，通过委托与 VM 解耦。
         /// </summary>
-        public IDeviceService DeviceService { get; set; }
+        public Func<string, System.Threading.CancellationToken, System.Threading.Tasks.Task>
+            ConnectDevice { get; set; }
+
+        /// <summary>断开委托（由 DevicePage 注入）：deviceId → void。</summary>
+        public Action<string> DisconnectDevice { get; set; }
 
         /// <summary>勾选变化（设备 Id, 是否选中）。页面侧可选使用。</summary>
         public event Action<string, bool> SelectionChanged;
@@ -217,12 +220,12 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (info == null || string.IsNullOrEmpty(info.Id))
                 return;
 
-            if (DeviceService == null)
+            if (ConnectDevice == null || DisconnectDevice == null)
                 return;
 
             // 已连接或连接中 → 断开 / 取消
             if (info.IsConnected || info.StatusType == DeviceStatusType.Connecting) {
-                DeviceService.Disconnect(info.Id);
+                DisconnectDevice(info.Id);
                 return;
             }
 
@@ -235,7 +238,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             string id = info.Id;
 
             try {
-                await DeviceService.ConnectAsync(id, CancellationToken.None);
+                await ConnectDevice(id, CancellationToken.None);
             } catch {
                 if (Device != null && Device.Id == id) {
                     Device.IsConnected = false;

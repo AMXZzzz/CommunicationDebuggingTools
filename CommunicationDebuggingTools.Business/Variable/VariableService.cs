@@ -132,12 +132,14 @@ namespace CommunicationDebuggingTools.Business.Variable {
             v.Quality = result.Quality;
             if (result.Success) {
                 v.LastValue = result.Value;
+                _devices.ReportCommSuccess(v.DeviceId);
                 return true;
             }
 
             LogError("读失败: " + v.Name + " @ " + v.Address
                 + " — " + (result.ErrorMessage ?? ""));
             CheckAndMarkDisconnected(v.DeviceId);
+            _devices.ReportCommError(v.DeviceId);
             return false;
         }
 
@@ -183,6 +185,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
             if (result.Success) {
                 v.LastValue = value;
                 v.Quality = DataQuality.Good;
+                _devices.ReportCommSuccess(v.DeviceId);
                 return true;
             }
 
@@ -190,6 +193,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 + " — " + (result.ErrorMessage ?? ""));
             CheckAndMarkDisconnected(v.DeviceId);
             v.Quality = DataQuality.Bad;
+            _devices.ReportCommError(v.DeviceId);
             return false;
         }
 

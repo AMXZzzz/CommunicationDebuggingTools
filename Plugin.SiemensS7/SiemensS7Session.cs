@@ -14,7 +14,7 @@ namespace Plugin.SiemensS7 {
 
         private TcpClient     _tcp;
         private NetworkStream _stream;
-        private int           _timeoutMs = 3000;
+        private int           _timeoutMs = AppConfig.DefaultTimeoutMs;
         private bool          _disposed;
         private ushort        _pduRef;
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -15,19 +16,18 @@ namespace CommunicationDebuggingTools.ViewModels {
 
     /// <summary>
     /// 设备管理页 ViewModel。
-    /// 绑定到 DevicePage.DataContext；Page 只做 UI 路由（面板显示/隐藏）。
+    ///
+    /// 封装原则：
+    ///   View 通过命令和委托与 VM 交互，不持有 IDeviceService 引用。
+    ///   DeviceCard 通过 ConnectDevice / DisconnectDevice 委托触发连接，
+    ///   VM 负责调用服务；View 只关心 UI 状态。
     /// </summary>
     public sealed class DevicePageViewModel : ViewModelBase {
 
         private readonly IDeviceService _devices;
-        private readonly IAppLogger _log;
+        private readonly IAppLogger     _log;
 
-        /// <summary>
-        /// 供 View 给 DataTemplate 生成的 DeviceCard 属性注入，避免卡片再走服务定位器。
-        /// </summary>
-        public IDeviceService Devices => _devices;
-
-        /// <summary>展示列表 = DeviceInfo 列表 + 末尾 AddDeviceMarker。</summary>
+        // ── 展示 ──────────────────────────────────────
         public ObservableCollection<object> DisplayList { get; } =
             new ObservableCollection<object>();
 
@@ -43,6 +43,7 @@ namespace CommunicationDebuggingTools.ViewModels {
             private set => SetField(ref _deviceCount, value);
         }
 
+        // ── 命令（工具栏 / 多选确认）─────────────────────
         public ICommand ConnectAllCommand { get; }
         public ICommand DisconnectAllCommand { get; }
         public ICommand RefreshCommand { get; }
@@ -50,14 +51,27 @@ namespace CommunicationDebuggingTools.ViewModels {
         public ICommand ConfirmDeleteCommand { get; }
         public ICommand CancelSelectCommand { get; }
 
-        public event Action RequestOpenAdd;
-        public event Action<DeviceInfo> RequestOpenEdit;
-        public event Action<string> RequestShowError;
+        // ── 委托（DeviceCard 注入后调用，替代直接持有 IDeviceService）─
+        /// <summary>
+        /// 连接单台设备。DevicePage 将此委托注入每个 DeviceCard。
+        /// Card 触发后调用 VM 执行，VM 调用 IDeviceService——View 不感知服务接口。
+        /// </summary>
+        public Func<string, CancellationToken, Task> ConnectDevice { get; }
 
+        /// <summary>断开单台设备。同上。</summary>
+        public Action<string> DisconnectDevice { get; }
+
+        // ── 事件（VM → View，驱动面板显示/隐藏）────────
+        public event Action             RequestOpenAdd;
+        public event Action<DeviceInfo> RequestOpenEdit;
+        public event Action<string>     RequestShowError;
+
+        // ── 构造 ──────────────────────────────────────
         public DevicePageViewModel (IDeviceService devices, IAppLogger logger = null) {
             _devices = devices ?? throw new ArgumentNullException(nameof(devices));
             _log = logger;
 
+            // 命令
             ConnectAllCommand = new RelayCommand(async () => await ConnectAllAsync());
             DisconnectAllCommand = new RelayCommand(DisconnectAll);
             RefreshCommand = new RelayCommand(Refresh);
@@ -65,10 +79,15 @@ namespace CommunicationDebuggingTools.ViewModels {
             ConfirmDeleteCommand = new RelayCommand<IEnumerable<string>>(ConfirmDelete);
             CancelSelectCommand = new RelayCommand(() => IsSelectMode = false);
 
+            // 委托——封装服务调用，Card 只拿委托不拿服务接口
+            ConnectDevice = (id, ct) => ConnectDeviceAsync(id, ct);
+            DisconnectDevice = id => _devices.Disconnect(id);
+
             _devices.Devices.CollectionChanged += (_, __) => RebuildDisplayList();
             RebuildDisplayList();
         }
 
+        // ── 公开操作（View 通过事件或直接调用）──────────
         public void OpenAdd () => RequestOpenAdd?.Invoke();
 
         public void OpenEdit (DeviceInfo info) {
@@ -102,16 +121,15 @@ namespace CommunicationDebuggingTools.ViewModels {
             }
         }
 
+        // ── 内部操作 ──────────────────────────────────
         private async Task ConnectAllAsync () {
             var list = _devices.Devices
                 .Where(d => d != null && !d.IsConnected)
                 .ToList();
-
             foreach (DeviceInfo d in list) {
                 d.StatusType = DeviceStatusType.Connecting;
                 d.IsConnected = false;
             }
-
             foreach (DeviceInfo d in list) {
                 try {
                     await _devices.ConnectAsync(d.Id, CancellationToken.None);
@@ -120,6 +138,15 @@ namespace CommunicationDebuggingTools.ViewModels {
                     d.StatusType = DeviceStatusType.Error;
                     _log?.Error("Device", "连接失败: " + d.Name, ex);
                 }
+            }
+        }
+
+        private async Task ConnectDeviceAsync (string id, CancellationToken ct) {
+            if (string.IsNullOrEmpty(id)) return;
+            try {
+                await _devices.ConnectAsync(id, ct);
+            } catch (Exception ex) {
+                _log?.Error("Device", "单台连接失败: " + id + " — " + ex.Message, ex);
             }
         }
 
@@ -136,18 +163,27 @@ namespace CommunicationDebuggingTools.ViewModels {
             _log?.Info("Device", "已刷新设备列表");
         }
 
+        /// <summary>问题 11 修复：批量删除失败时上报错误，不再吞异常。</summary>
         private void ConfirmDelete (IEnumerable<string> ids) {
             if (ids == null) return;
-            foreach (string id in ids.ToList())
-                try { _devices.Remove(id); } catch { }
+            var errors = new StringBuilder();
+            foreach (string id in ids.ToList()) {
+                try {
+                    _devices.Remove(id);
+                } catch (Exception ex) {
+                    _log?.Error("Device", "批量删除失败: " + id + " — " + ex.Message, ex);
+                    errors.AppendLine(ex.Message);
+                }
+            }
             IsSelectMode = false;
+            if (errors.Length > 0)
+                RequestShowError?.Invoke("部分设备删除失败：\n" + errors.ToString().TrimEnd());
         }
 
         private void RebuildDisplayList () {
             DisplayList.Clear();
             foreach (DeviceInfo d in _devices.Devices)
                 DisplayList.Add(d);
-            // 使用 Views 命名空间下的占位类型，与 XAML DataTemplate 一致
             DisplayList.Add(AddDeviceMarker.Instance);
             DeviceCount = _devices.Devices.Count;
         }

@@ -1,4 +1,5 @@
-﻿using CommunicationDebuggingTools.Core.Enums;
+﻿using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core.Enums;
 
 namespace CommunicationDebuggingTools.Core.Models {
 
@@ -79,7 +80,7 @@ namespace CommunicationDebuggingTools.Core.Models {
             ByteOrder = ByteOrder.BigEndian;
             WordOrder = WordOrder.HighWordFirst;
             StringEncoding = StringEncodingKind.Utf8;
-            TimeoutMs = 3000;
+            TimeoutMs = AppConfig.DefaultTimeoutMs;
         }
     }
 }

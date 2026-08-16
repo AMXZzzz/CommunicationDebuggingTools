@@ -16,11 +16,12 @@ namespace CommunicationDebuggingTools.Views.Pages.Log {
             DataContext = _vm;
 
             listLog.ItemsSource = _vm.Entries;
-
             _vm.EntryAdded += OnEntryAdded;
+
+            // Unloaded 时 Dispose：退订日志事件，防止 MemoryAppLogger 持有本 VM
             Unloaded += (_, __) => {
                 _vm.EntryAdded -= OnEntryAdded;
-                _vm.Detach();
+                _vm.Dispose();
             };
         }
 
@@ -32,9 +33,8 @@ namespace CommunicationDebuggingTools.Views.Pages.Log {
             }));
         }
 
-        /// <summary>对应 XAML：Click="BtnClear_Click"</summary>
         private void BtnClear_Click (object sender, RoutedEventArgs e) {
-            if (_vm.ClearCommand != null && _vm.ClearCommand.CanExecute(null))
+            if (_vm.ClearCommand?.CanExecute(null) == true)
                 _vm.ClearCommand.Execute(null);
         }
     }

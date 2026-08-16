@@ -1,11 +1,8 @@
-﻿using System;
-using System.IO;
-using System.Windows;
-using System.Windows.Threading;
-using CommunicationDebuggingTools.Business.Device;
+﻿using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Persistence;
 using CommunicationDebuggingTools.Business.Tools;
 using CommunicationDebuggingTools.Business.Variable;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.ViewModels;
@@ -15,6 +12,10 @@ using CommunicationDebuggingTools.Views.Pages.Monitor;
 using CommunicationDebuggingTools.Views.Pages.Settings;
 using CommunicationDebuggingTools.Views.VariableConfigPage;
 using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.IO;
+using System.Windows;
+using System.Windows.Threading;
 
 namespace CommunicationDebuggingTools {
 
@@ -55,7 +56,7 @@ namespace CommunicationDebuggingTools {
             _pollingEngine.Start();
 
             // ④ 心跳：只使用缓存引用，避免退出阶段访问已 Dispose 的 IServiceProvider
-            _heartbeat = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _heartbeat = new DispatcherTimer { Interval = TimeSpan.FromSeconds(AppConfig.HeartbeatIntervalSeconds) };
             _heartbeat.Tick += Heartbeat_Tick;
             _heartbeat.Start();
 
@@ -138,7 +139,7 @@ namespace CommunicationDebuggingTools {
             var sc = new ServiceCollection();
 
             // ── 基础设施 ──
-            sc.AddSingleton<IAppLogger>(_ => new MemoryAppLogger(500));
+            sc.AddSingleton<IAppLogger>(_ => new MemoryAppLogger(AppConfig.LogCapacity));
 
             // ── 协议解析器 ──
             sc.AddSingleton<IProtocolResolver>(sp => {

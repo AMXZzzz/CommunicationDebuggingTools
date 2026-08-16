@@ -46,6 +46,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             _vm.DisplayList.CollectionChanged += DisplayList_CollectionChanged;
             Loaded += (_, __) => InjectServicesToCards();
             Unloaded += DevicePage_Unloaded;
+            editPanel.ProtocolResolver = _protocols;
         }
 
         private void DisplayList_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) {
@@ -60,7 +61,8 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 return;
 
             foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
-                card.DeviceService = _vm.Devices;
+                card.ConnectDevice = _vm.ConnectDevice;
+                card.DisconnectDevice = _vm.DisconnectDevice;
                 card.SetSelectionMode(_vm.IsSelectMode);
             }
         }
@@ -232,7 +234,8 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
 
         private void ApplySelectModeToCards (bool selectMode) {
             foreach (DeviceCard card in FindVisualChildren<DeviceCard>(deviceList)) {
-                card.DeviceService = _vm.Devices;
+                card.ConnectDevice = _vm.ConnectDevice;
+                card.DisconnectDevice = _vm.DisconnectDevice;
                 card.SetSelectionMode(selectMode);
             }
         }

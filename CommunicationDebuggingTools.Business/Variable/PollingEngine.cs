@@ -1,11 +1,12 @@
-﻿using System;
+﻿using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Logging;
+using CommunicationDebuggingTools.Core.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using CommunicationDebuggingTools.Core.Interfaces;
-using CommunicationDebuggingTools.Core.Logging;
-using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Business.Variable {
 
@@ -26,10 +27,10 @@ namespace CommunicationDebuggingTools.Business.Variable {
 
         // ── 常量 ─────────────────────────────────────────
         /// <summary>主循环节拍（毫秒）。决定了 ScanRateMs 的实际最小粒度。</summary>
-        private const int TICK_MS = 100;
+        private const int TICK_MS = AppConfig.PollingTickMs;
 
         /// <summary>Stop() 等待后台任务结束的超时。</summary>
-        private const int STOP_WAIT_MS = 5000;
+        private const int STOP_WAIT_MS = AppConfig.PollingStopWaitMs;
 
         // ── 依赖 ─────────────────────────────────────────
         private readonly IVariableService  _variables;
