@@ -16,6 +16,7 @@ using CommunicationDebuggingTools.Business.Device;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -35,6 +36,7 @@ namespace CommunicationDebuggingTools {
         private IDeviceService _deviceService;
         private IPollingEngine _pollingEngine;
         private IAppLogger _log;
+        private CancellationTokenSource _remoteProbeCts;
 
         // ── 启动 ─────────────────────────────────────
         protected override void OnStartup (StartupEventArgs e) {
@@ -49,49 +51,35 @@ namespace CommunicationDebuggingTools {
             _log = Services.GetRequiredService<IAppLogger>();
             _log.Info("App", "服务容器就绪");
 
-            // ② 初始化（Load 与构造分离）；缓存单例，退出/心跳不再走已释放的 Services
-            _deviceService = Services.GetRequiredService<IDeviceService>();
-            _deviceService.Load();
-            var varSvc = Services.GetRequiredService<IVariableService>();
-            varSvc.Load();
+            // ② 先显示主窗口，不等待远端状态。
+            var mainWindow = Services.GetRequiredService<MainWindow>();
+            mainWindow.Show();
 
-            // Remote 模式：探测 Host；不可达时提示，不闪退。再启动 Watch。
-            if (Services.GetService(typeof(EngineClient)) is EngineClient ec) {
-                bool hostOk = false;
-                try {
-                    hostOk = ec.PingAsync(CancellationToken.None)
-                        .ConfigureAwait(false).GetAwaiter().GetResult();
-                } catch {
-                    hostOk = false;
-                }
-                if (!hostOk) {
-                    try {
-                        MessageBox.Show(
-                            "当前优先远端，但无法连接 EngineHost：\n" + (ec.Address ?? "") +
-                            "\n\n已自动回退为【本地模式】（本机插件直连 PLC）。\n" +
-                            "可同时启动 EngineHost；连通后重启应用即可走远端。\n" +
-                            "仅本机调试时也可在设置中改为本地模式。",
-                            "连接模式",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
-                    } catch { }
-                } else {
-                    try { ec.StartWatch(); } catch { }
-                }
+            // ③ 初始化（Load 与构造分离）；缓存单例，退出/心跳不再走已释放的 Services
+            bool remoteMode = AppSettings.Load().RemoteMode;
+            _deviceService = Services.GetRequiredService<IDeviceService>();
+            var varSvc = Services.GetRequiredService<IVariableService>();
+
+            // Remote 模式下不做启动同步加载，避免等待远端导致 UI 卡住。
+            if (!remoteMode) {
+                _deviceService.Load();
+                varSvc.Load();
             }
 
-            // ③ 轮询引擎须在 UI 线程 Start（内部捕获 SynchronizationContext）
+            // ④ 轮询引擎须在 UI 线程 Start（内部捕获 SynchronizationContext）
             _pollingEngine = Services.GetRequiredService<IPollingEngine>();
             _pollingEngine.Start();
 
-            // ④ 心跳：只使用缓存引用，避免退出阶段访问已 Dispose 的 IServiceProvider
+            // ⑤ 心跳：只使用缓存引用，避免退出阶段访问已 Dispose 的 IServiceProvider
             _heartbeat = new DispatcherTimer { Interval = TimeSpan.FromSeconds(AppConfig.HeartbeatIntervalSeconds) };
             _heartbeat.Tick += Heartbeat_Tick;
             _heartbeat.Start();
 
-            // ⑤ 主窗口
-            var mainWindow = Services.GetRequiredService<MainWindow>();
-            mainWindow.Show();
+            // Remote 模式：后台探测连通后再启动 Watch。
+            if (remoteMode && Services.GetService(typeof(EngineClient)) is EngineClient ec) {
+                _remoteProbeCts = new CancellationTokenSource();
+                StartRemoteWatchInBackground(ec, _remoteProbeCts.Token);
+            }
 
             _log.Info("App", "应用已启动");
         }
@@ -143,6 +131,12 @@ namespace CommunicationDebuggingTools {
             }
 
             // ② 停业务（使用启动时缓存的引用）
+            try {
+                _remoteProbeCts?.Cancel();
+                _remoteProbeCts?.Dispose();
+            } catch { }
+            _remoteProbeCts = null;
+
             try { _pollingEngine?.Stop(); } catch { }
             // Remote 模式：停止 Watch 流
             try { (Services?.GetService(typeof(EngineClient)) as EngineClient)?.StopWatch(); } catch { }
@@ -212,17 +206,17 @@ namespace CommunicationDebuggingTools {
             bool preferRemote = settings.RemoteMode;
 
             sc.AddSingleton<IDeviceService>(sp => {
-                if (preferRemote && IsHostReachable(sp))
+                if (preferRemote)
                     return sp.GetRequiredService<EngineClient>().Devices;
                 return sp.GetRequiredService<DeviceService>();
             });
             sc.AddSingleton<IVariableService>(sp => {
-                if (preferRemote && IsHostReachable(sp))
+                if (preferRemote)
                     return sp.GetRequiredService<EngineClient>().Variables;
                 return sp.GetRequiredService<VariableService>();
             });
             sc.AddSingleton<IPollingEngine>(sp => {
-                if (preferRemote && IsHostReachable(sp))
+                if (preferRemote)
                     return new NullPollingEngine();
                 return sp.GetRequiredService<PollingEngine>();
             });
@@ -231,15 +225,31 @@ namespace CommunicationDebuggingTools {
             return sc.BuildServiceProvider();
         }
 
-        /// <summary>探测 EngineHost 是否可达。</summary>
-        private static bool IsHostReachable (IServiceProvider sp) {
-            try {
-                EngineClient ec = sp.GetRequiredService<EngineClient>();
-                return ec.PingAsync(CancellationToken.None)
-                    .ConfigureAwait(false).GetAwaiter().GetResult();
-            } catch {
-                return false;
-            }
+        private void StartRemoteWatchInBackground (EngineClient client, CancellationToken ct) {
+            _ = Task.Run(async () => {
+                while (!ct.IsCancellationRequested) {
+                    try {
+                        bool ok = await client.PingAsync(ct).ConfigureAwait(false);
+                        if (ok) {
+                            await Dispatcher.InvokeAsync(() => {
+                                try { client.StartWatch(); } catch { }
+                            });
+                            try { _log?.Info("App", "远端 EngineHost 已连通，已启动 Watch"); } catch { }
+                            return;
+                        }
+                    } catch (OperationCanceledException) {
+                        return;
+                    } catch {
+                        // 后台重试，不阻塞 UI
+                    }
+
+                    try {
+                        await Task.Delay(1000, ct).ConfigureAwait(false);
+                    } catch (OperationCanceledException) {
+                        return;
+                    }
+                }
+            }, ct);
         }
 
         private static void RegisterPages (ServiceCollection sc) {
