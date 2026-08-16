@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
-using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Logging;
 
 namespace CommunicationDebuggingTools.ViewModels {

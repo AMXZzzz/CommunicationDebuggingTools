@@ -1,4 +1,4 @@
-﻿namespace CommunicationDebuggingTools.Core.Config {
+﻿namespace CommunicationDebuggingTools.Core {
 
     /// <summary>
     /// 应用级常量集中配置。

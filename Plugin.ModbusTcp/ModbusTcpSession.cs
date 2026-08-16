@@ -1,5 +1,5 @@
 ﻿using System;
-using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;

@@ -1,11 +1,10 @@
 ﻿using System;
-using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
-using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;

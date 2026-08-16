@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace CommunicationDebuggingTools.Core.Attributes {
+namespace CommunicationDebuggingTools.Core.Interfaces {
 
     /// <summary>
     /// 标注协议插件的显示名称，供 ProtocolResolver 在不实例化类的情况下完成注册。

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Business.Tools;
-using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;

@@ -42,8 +42,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Attributes\ProtocolNameAttribute.cs" />
-    <Compile Include="Config\AppConfig.cs" />
+    <Compile Include="Interfaces\ProtocolNameAttribute.cs" />
+    <Compile Include="AppConfig.cs" />
     <Compile Include="Enums\DataOrder.cs" />
     <Compile Include="Enums\DataQuality.cs" />
     <Compile Include="Enums\DeviceStatusType.cs" />
@@ -55,7 +55,7 @@
     <Compile Include="Interfaces\IPollingEngine.cs" />
     <Compile Include="Interfaces\IProtocol.cs" />
     <Compile Include="Enums\LaneType.cs" />
-    <Compile Include="Interfaces\IProtocolPluginResolver.cs" />
+    <Compile Include="Interfaces\IProtocolResolver.cs" />
     <Compile Include="Interfaces\IVariableRepository.cs" />
     <Compile Include="Interfaces\IVariableService.cs" />
     <Compile Include="Logging\IAppLogger.cs" />

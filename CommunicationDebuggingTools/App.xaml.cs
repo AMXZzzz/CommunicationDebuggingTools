@@ -2,7 +2,7 @@
 using CommunicationDebuggingTools.Business.Persistence;
 using CommunicationDebuggingTools.Business.Tools;
 using CommunicationDebuggingTools.Business.Variable;
-using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.ViewModels;

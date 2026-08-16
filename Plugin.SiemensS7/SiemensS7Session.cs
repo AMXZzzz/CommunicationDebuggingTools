@@ -1,6 +1,6 @@
 ﻿using CommunicationDebuggingTools.Core.Tools;
 using System;
-using CommunicationDebuggingTools.Core.Config;
+using CommunicationDebuggingTools.Core;
 using System.Globalization;
 using System.Net.Sockets;
 using System.Threading;

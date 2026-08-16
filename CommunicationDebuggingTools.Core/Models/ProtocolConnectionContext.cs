@@ -1,4 +1,4 @@
-﻿using CommunicationDebuggingTools.Core.Config;
+﻿using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Enums;
 
 namespace CommunicationDebuggingTools.Core.Models {

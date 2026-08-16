@@ -1,5 +1,4 @@
-﻿using CommunicationDebuggingTools.Core.Attributes;
-using CommunicationDebuggingTools.Core.Config;
+﻿using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;

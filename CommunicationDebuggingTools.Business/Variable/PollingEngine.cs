@@ -1,4 +1,4 @@
-﻿using CommunicationDebuggingTools.Core.Config;
+﻿using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;

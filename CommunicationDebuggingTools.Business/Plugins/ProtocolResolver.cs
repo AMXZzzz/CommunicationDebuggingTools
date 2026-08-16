@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
 
 namespace CommunicationDebuggingTools.Business.Tools {
