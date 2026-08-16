@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Contracts.V1;
 using CommunicationDebuggingTools.Core.Enums;
+using CoreOp = CommunicationDebuggingTools.Core.Models.OperationResult;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
@@ -78,7 +79,7 @@ namespace CommunicationDebuggingTools.Client {
         public void Remove (string id) =>
             _client.DeleteVariable(new DeleteVariableRequest { Id = id });
 
-        public async Task<OperationResult> ReadAsync (string variableId, CancellationToken ct) {
+        public async Task<CoreOp> ReadAsync (string variableId, CancellationToken ct) {
             try {
                 var resp = await _client.ReadVariableAsync(
                     new ReadVariableRequest { Id = variableId }, cancellationToken: ct)
@@ -88,23 +89,23 @@ namespace CommunicationDebuggingTools.Client {
                     if (v != null) MergeValue(v, resp.Variable);
                 }
                 return resp?.Result?.Ok == true
-                    ? OperationResult.Ok
-                    : OperationResult.ProtocolError(resp?.Result?.Message ?? "读失败");
-            } catch (OperationCanceledException) { return OperationResult.Cancelled; }
-            catch (Exception ex)                 { return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError); }
+                    ? CoreOp.Ok
+                    : CoreOp.ProtocolError(resp?.Result?.Message ?? "读失败");
+            } catch (OperationCanceledException) { return CoreOp.Cancelled; }
+            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, OperationErrorCode.ProtocolError); }
         }
 
-        public async Task<OperationResult> WriteAsync (string variableId, object value, CancellationToken ct) {
+        public async Task<CoreOp> WriteAsync (string variableId, object value, CancellationToken ct) {
             try {
                 string raw = value != null ? System.Convert.ToString(value) : "";
                 var resp = await _client.WriteVariableAsync(
                     new WriteVariableRequest { Id = variableId, Value = raw }, cancellationToken: ct)
                     .ConfigureAwait(false);
                 return resp?.Result?.Ok == true
-                    ? OperationResult.Ok
-                    : OperationResult.ProtocolError(resp?.Result?.Message ?? "写失败");
-            } catch (OperationCanceledException) { return OperationResult.Cancelled; }
-            catch (Exception ex)                 { return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError); }
+                    ? CoreOp.Ok
+                    : CoreOp.ProtocolError(resp?.Result?.Message ?? "写失败");
+            } catch (OperationCanceledException) { return CoreOp.Cancelled; }
+            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, OperationErrorCode.ProtocolError); }
         }
 
         public async Task ReadByDeviceAsync (string deviceId, CancellationToken ct) {
