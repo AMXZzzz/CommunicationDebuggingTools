@@ -10,7 +10,7 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using Grpc.Core;
-using CoreOp = CommunicationDebuggingTools.Core.Enums.OperationResult;
+using CoreOp = CommunicationDebuggingTools.Core.Models.OperationResult;
 
 namespace CommunicationDebuggingTools.EngineHost.Services {
 
