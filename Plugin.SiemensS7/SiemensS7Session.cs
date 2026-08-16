@@ -11,14 +11,13 @@ namespace Plugin.SiemensS7 {
     internal sealed class SiemensS7Session : IDisposable {
         private const int DEFAULT_PORT = 102;
 
-
-        private TcpClient     _tcp;
+        private TcpClient _tcp;
         private NetworkStream _stream;
-        private int           _timeoutMs = AppConfig.DefaultTimeoutMs;
-        private bool          _disposed;
-        private ushort        _pduRef;
+        private int _timeoutMs = AppConfig.DefaultTimeoutMs;
+        private bool _disposed;
+        private int _pduRefField;
+        private readonly SemaphoreSlim _io = new SemaphoreSlim(1, 1);
 
-        private readonly object _sync = new object();
         public int Rack { get; private set; }
         public int Slot { get; private set; } = 1;
 
@@ -56,7 +55,7 @@ namespace Plugin.SiemensS7 {
             if (string.IsNullOrWhiteSpace(ip))
                 throw new ArgumentException("IP 为空");
 
-            port = port > 0 ? port : 102;
+            port = port > 0 ? port : DEFAULT_PORT;
             TimeoutMs = timeoutMs > 0 ? timeoutMs : AppConfig.DefaultTimeoutMs;
             _tcp = new TcpClient();
 
@@ -74,60 +73,53 @@ namespace Plugin.SiemensS7 {
             }
 
             _stream = _tcp.GetStream();
-            _stream.ReadTimeout = TimeoutMs;
-            _stream.WriteTimeout = TimeoutMs;
-            _pduRef = 0;
+            _pduRefField = 0;
 
             // ① COTP Connection Request → Confirm
-            SendTpkt(BuildCotpCR(Rack, Slot));
-            byte[] cc = ReadTpkt();
+            await SendTpktAsync(BuildCotpCR(Rack, Slot), ct).ConfigureAwait(false);
+            byte[] cc = await ReadTpktAsync(ct).ConfigureAwait(false);
             if (cc == null || cc.Length < 2 || cc[1] != 0xD0)
                 throw new Exception("COTP 握手失败：未收到 CC（0xD0）");
 
             // ② S7 Setup Communication
-            SendTpkt(WrapDt(BuildS7SetupJob(NextRef())));
-            byte[] setupResp = ReadTpkt();
-            byte[] s7setup   = ExtractS7(setupResp);
+            await SendTpktAsync(WrapDt(BuildS7SetupJob(NextRef())), ct).ConfigureAwait(false);
+            byte[] setupResp = await ReadTpktAsync(ct).ConfigureAwait(false);
+            byte[] s7setup = ExtractS7(setupResp);
             if (s7setup == null || s7setup.Length < 13 || s7setup[1] != 0x03 || s7setup[12] != 0xF0)
                 throw new Exception("S7 Setup Communication 失败");
         }
 
         public void Disconnect () {
-            try { _stream?.Close(); } catch { }
-            try { _tcp?.Close(); } catch { }
-            _stream = null;
-            _tcp = null;
+            try { if (_stream != null) { _stream.Close(); _stream = null; } } catch { }
+            try { if (_tcp != null) { _tcp.Close(); _tcp = null; } } catch { }
         }
 
         // ════════════════════════════════════════════════
-        //  发送 S7 Job，返回 Ack-Data 的 S7 PDU 字节
+        //  发送 S7 Job，返回 Ack-Data 的 S7 PDU
         // ════════════════════════════════════════════════
-        public byte[] Transact (byte[] s7Job) {
+        public async Task<byte[]> TransactAsync (byte[] s7Job, CancellationToken ct) {
             if (!IsConnected) throw new InvalidOperationException("未连接");
-            lock (_sync) {
-                SendTpkt(WrapDt(s7Job));
-                byte[] resp = ReadTpkt();
+            await _io.WaitAsync(ct).ConfigureAwait(false);
+            try {
+                await SendTpktAsync(WrapDt(s7Job), ct).ConfigureAwait(false);
+                byte[] resp = await ReadTpktAsync(ct).ConfigureAwait(false);
                 byte[] s7 = ExtractS7(resp);
                 if (s7 == null)
                     throw new Exception("无效响应");
                 return s7;
+            } finally {
+                _io.Release();
             }
         }
 
-
         public ushort NextRef () {
-            lock (_sync)
-                return ++_pduRef;
+            return (ushort)Interlocked.Increment(ref _pduRefField);
         }
 
         // ════════════════════════════════════════════════
         //  PDU 构造辅助
         // ════════════════════════════════════════════════
 
-        /// <summary>
-        /// COTP CR（Connection Request）帧。
-        /// called TSAP：高位=机架，低位=槽号（FP/S7 标准编码）。
-        /// </summary>
         internal static byte[] BuildCotpCR (int rack, int slot) {
             byte calledLo = (byte)((rack << 5) | (slot & 0x1F));
             return new byte[] {
@@ -142,21 +134,19 @@ namespace Plugin.SiemensS7 {
             };
         }
 
-        /// <summary>S7 Setup Communication Job PDU。</summary>
         internal static byte[] BuildS7SetupJob (ushort pduRef) {
             return new byte[] {
-                0x32, 0x01, 0x00, 0x00,            // magic, Job
+                0x32, 0x01, 0x00, 0x00,
                 (byte)(pduRef >> 8), (byte)(pduRef & 0xFF),
-                0x00, 0x08,                        // param length = 8
-                0x00, 0x00,                        // data length = 0
-                0xF0, 0x00,                        // function = Setup
-                0x00, 0x01,                        // max calling jobs
-                0x00, 0x01,                        // max called jobs
-                0x01, 0xE0                         // max PDU size = 480
+                0x00, 0x08,
+                0x00, 0x00,
+                0xF0, 0x00,
+                0x00, 0x01,
+                0x00, 0x01,
+                0x01, 0xE0
             };
         }
 
-        /// <summary>将 S7 PDU 包装在 COTP DT 头中（3 字节）。</summary>
         internal static byte[] WrapDt (byte[] s7) {
             byte[] p = new byte[3 + s7.Length];
             p[0] = 0x02; p[1] = 0xF0; p[2] = 0x80;
@@ -164,7 +154,6 @@ namespace Plugin.SiemensS7 {
             return p;
         }
 
-        /// <summary>从 COTP payload 中提取 S7 PDU（跳过 3 字节 DT 头）。</summary>
         internal static byte[] ExtractS7 (byte[] payload) {
             if (payload == null || payload.Length < 4 || payload[1] != 0xF0)
                 return null;
@@ -174,40 +163,49 @@ namespace Plugin.SiemensS7 {
         }
 
         // ════════════════════════════════════════════════
-        //  TPKT 传输
+        //  TPKT 传输（真异步）
         // ════════════════════════════════════════════════
-        void SendTpkt (byte[] payload) {
-            int total   = payload.Length + 4;
-            byte[] pkt  = new byte[total];
+        async Task SendTpktAsync (byte[] payload, CancellationToken ct) {
+            int total = payload.Length + 4;
+            byte[] pkt = new byte[total];
             pkt[0] = 0x03;
             pkt[1] = 0x00;
             pkt[2] = (byte)(total >> 8);
             pkt[3] = (byte)(total & 0xFF);
             Array.Copy(payload, 0, pkt, 4, payload.Length);
-            _stream.Write(pkt, 0, pkt.Length);
-            _stream.Flush();
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                linked.CancelAfter(TimeoutMs);
+                await _stream.WriteAsync(pkt, 0, pkt.Length, linked.Token).ConfigureAwait(false);
+                await _stream.FlushAsync(linked.Token).ConfigureAwait(false);
+            }
         }
 
-        byte[] ReadTpkt () {
-            byte[] hdr = ReadExact(4);
+        async Task<byte[]> ReadTpktAsync (CancellationToken ct) {
+            byte[] hdr = await ReadExactAsync(4, ct).ConfigureAwait(false);
             if (hdr == null || hdr[0] != 0x03) return null;
             int payLen = ((hdr[2] << 8) | hdr[3]) - 4;
-            return payLen > 0 ? ReadExact(payLen) : new byte[0];
+            return payLen > 0
+                ? await ReadExactAsync(payLen, ct).ConfigureAwait(false)
+                : new byte[0];
         }
 
-        byte[] ReadExact (int count) {
-            byte[] buf  = new byte[count];
-            int    read = 0;
+        async Task<byte[]> ReadExactAsync (int count, CancellationToken ct) {
+            byte[] buf = new byte[count];
+            int read = 0;
             while (read < count) {
-                int n = _stream.Read(buf, read, count - read);
-                if (n == 0) throw new Exception("连接已关闭");
-                read += n;
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                    linked.CancelAfter(TimeoutMs);
+                    int n = await _stream.ReadAsync(buf, read, count - read, linked.Token)
+                        .ConfigureAwait(false);
+                    if (n == 0) throw new Exception("连接已关闭");
+                    read += n;
+                }
             }
             return buf;
         }
 
         // ════════════════════════════════════════════════
-        //  地址解析（不变）
+        //  地址解析
         // ════════════════════════════════════════════════
         public static S7Address ParseAddress (string address) {
             if (string.IsNullOrWhiteSpace(address))
@@ -284,29 +282,39 @@ namespace Plugin.SiemensS7 {
                 throw new ArgumentException("偏移无效: " + s);
             return v;
         }
+
         public void Dispose () {
             if (_disposed) return;
             _disposed = true;
             Disconnect();
+            try { _io.Dispose(); } catch { }
         }
     }
 
     internal struct S7Address {
         public char Area;
-        public int  DbNumber;
-        public int  ByteOffset;
-        public int  Bit;
+        public int DbNumber;
+        public int ByteOffset;
+        public int Bit;
         public S7TransportSize Size;
 
-        public static S7Address DbBit (int db, int b, int bit) => new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = bit, Size = S7TransportSize.Bit };
-        public static S7Address DbByte (int db, int b) => new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = -1, Size = S7TransportSize.Byte };
-        public static S7Address DbWord (int db, int b) => new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = -1, Size = S7TransportSize.Word };
-        public static S7Address DbDWord (int db, int b) => new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = -1, Size = S7TransportSize.DWord };
+        public static S7Address DbBit (int db, int b, int bit) =>
+            new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = bit, Size = S7TransportSize.Bit };
+        public static S7Address DbByte (int db, int b) =>
+            new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = -1, Size = S7TransportSize.Byte };
+        public static S7Address DbWord (int db, int b) =>
+            new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = -1, Size = S7TransportSize.Word };
+        public static S7Address DbDWord (int db, int b) =>
+            new S7Address { Area = 'D', DbNumber = db, ByteOffset = b, Bit = -1, Size = S7TransportSize.DWord };
 
-        public static S7Address AreaBit (char a, int b, int bit) => new S7Address { Area = a, ByteOffset = b, Bit = bit, Size = S7TransportSize.Bit };
-        public static S7Address AreaByte (char a, int b) => new S7Address { Area = a, ByteOffset = b, Bit = -1, Size = S7TransportSize.Byte };
-        public static S7Address AreaWord (char a, int b) => new S7Address { Area = a, ByteOffset = b, Bit = -1, Size = S7TransportSize.Word };
-        public static S7Address AreaDWord (char a, int b) => new S7Address { Area = a, ByteOffset = b, Bit = -1, Size = S7TransportSize.DWord };
+        public static S7Address AreaBit (char a, int b, int bit) =>
+            new S7Address { Area = a, ByteOffset = b, Bit = bit, Size = S7TransportSize.Bit };
+        public static S7Address AreaByte (char a, int b) =>
+            new S7Address { Area = a, ByteOffset = b, Bit = -1, Size = S7TransportSize.Byte };
+        public static S7Address AreaWord (char a, int b) =>
+            new S7Address { Area = a, ByteOffset = b, Bit = -1, Size = S7TransportSize.Word };
+        public static S7Address AreaDWord (char a, int b) =>
+            new S7Address { Area = a, ByteOffset = b, Bit = -1, Size = S7TransportSize.DWord };
     }
 
     internal enum S7TransportSize { Bit, Byte, Word, DWord }

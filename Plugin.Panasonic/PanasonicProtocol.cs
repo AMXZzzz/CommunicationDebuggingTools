@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Core;
@@ -9,15 +8,6 @@ using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Tools;
 
 namespace Plugin.Panasonic {
-    /// <summary>
-    /// 松下 MEWTOCOL-COM 协议插件（真机规范）。
-    /// 地址/站号/报文仅在本插件与 Session 内处理；编解码见 <see cref="Tools"/>。
-    /// <para>
-    /// 数据区 RD/WD：区码 + 5 位十进制，起止各一次（如 D00100D00101）。
-    /// 字内线上低字节在前；字间顺序由 <see cref="ProtocolDataMessage.WordOrder"/> 决定；
-    /// 字符串编码由 <see cref="ProtocolDataMessage.StringEncoding"/> 决定。
-    /// </para>
-    /// </summary>
     [ProtocolName("Panasonic MEWTOCOL")]
     public sealed class PanasonicProtocol : IProtocol {
         private readonly PanasonicSession _session = new PanasonicSession();
@@ -51,13 +41,13 @@ namespace Plugin.Panasonic {
 
         public void Disconnect () => _session.Disconnect();
 
-        public Task<ProtocolDataMessage> ReadAsync (
+        public async Task<ProtocolDataMessage> ReadAsync (
             ProtocolDataMessage request,
             CancellationToken cancellationToken) {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
             if (!_session.IsConnected)
-                return Task.FromResult(Fail(request, "未连接"));
+                return Fail(request, "未连接");
 
             try {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -65,46 +55,43 @@ namespace Plugin.Panasonic {
 
                 if (addr.IsBit) {
                     string cmd = "RCS" + PanasonicSession.FormatContact(addr);
-                    string resp = _session.Transact(cmd);
+                    string resp = await _session.TransactAsync(cmd, cancellationToken)
+                        .ConfigureAwait(false);
                     EnsureNoError(resp);
                     request.Value = ParseContactValue(resp);
-                    request.Success = true;
-                    request.Quality = DataQuality.Good;
-                    request.ErrorMessage = "";
-                    return Task.FromResult(request);
+                } else {
+                    int wordCount = ProtocolCodecTools.WordsNeeded(
+                        request.DataType, request.Length, request.StringEncoding);
+                    if (wordCount < 1) wordCount = 1;
+
+                    string body = "RD" + FormatDataRange(addr, wordCount);
+                    string resp = await _session.TransactAsync(body, cancellationToken)
+                        .ConfigureAwait(false);
+                    EnsureNoError(resp);
+                    ushort[] words = ParseDataWords(resp, wordCount);
+                    request.Value = ProtocolCodecTools.FromWords(
+                        words, request.DataType, request.WordOrder, request.ByteOrder,
+                        request.Length, request.StringEncoding);
                 }
 
-                int wordCount = ProtocolCodecTools.WordsNeeded(
-                    request.DataType, request.Length, request.StringEncoding);
-                string rdResp = _session.Transact("RD" + FormatDataRange(addr, wordCount));
-                EnsureNoError(rdResp);
-
-                ushort[] data = ParseDataWords(rdResp, wordCount);
-                request.Value = ProtocolCodecTools.FromWords(
-                    data,
-                    request.DataType,
-                    request.WordOrder,
-                    request.ByteOrder,
-                    request.Length,
-                    request.StringEncoding);
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
-                return Task.FromResult(request);
+                return request;
             } catch (OperationCanceledException) {
-                return Task.FromResult(Fail(request, "已取消"));
+                return Fail(request, "已取消");
             } catch (Exception ex) {
-                return Task.FromResult(Fail(request, ex.Message));
+                return Fail(request, ex.Message);
             }
         }
 
-        public Task<ProtocolDataMessage> WriteAsync (
+        public async Task<ProtocolDataMessage> WriteAsync (
             ProtocolDataMessage request,
             CancellationToken cancellationToken) {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
             if (!_session.IsConnected)
-                return Task.FromResult(Fail(request, "未连接"));
+                return Fail(request, "未连接");
 
             try {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -113,58 +100,50 @@ namespace Plugin.Panasonic {
                 if (addr.IsBit) {
                     bool bit = ProtocolCodecTools.ToBool(request.Value);
                     string cmd = "WCS" + PanasonicSession.FormatContact(addr) + (bit ? "1" : "0");
-                    string resp = _session.Transact(cmd);
+                    string resp = await _session.TransactAsync(cmd, cancellationToken)
+                        .ConfigureAwait(false);
                     EnsureNoError(resp);
-                    request.Success = true;
-                    request.Quality = DataQuality.Good;
-                    request.ErrorMessage = "";
-                    return Task.FromResult(request);
+                } else {
+                    ushort[] words = ProtocolCodecTools.ToWords(
+                        request.Value, request.DataType, request.Length,
+                        request.WordOrder, request.ByteOrder, request.StringEncoding);
+
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append("WD").Append(FormatDataRange(addr, words.Length));
+                    for (int i = 0; i < words.Length; i++)
+                        sb.Append(ProtocolCodecTools.SwapBytes(words[i]).ToString("X4"));
+
+                    string wdResp = await _session.TransactAsync(sb.ToString(), cancellationToken)
+                        .ConfigureAwait(false);
+                    EnsureNoError(wdResp);
                 }
-
-                ushort[] words = ProtocolCodecTools.ToWords(
-                    request.Value,
-                    request.DataType,
-                    request.Length,
-                    request.WordOrder,
-                    request.ByteOrder,
-                    request.StringEncoding);
-
-                var sb = new System.Text.StringBuilder();
-                sb.Append("WD").Append(FormatDataRange(addr, words.Length));
-                for (int i = 0; i < words.Length; i++)
-                    sb.Append(ProtocolCodecTools.SwapBytes(words[i]).ToString("X4"));
-
-                string wdResp = _session.Transact(sb.ToString());
-                EnsureNoError(wdResp);
 
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
-                return Task.FromResult(request);
+                return request;
             } catch (OperationCanceledException) {
-                return Task.FromResult(Fail(request, "已取消"));
+                return Fail(request, "已取消");
             } catch (Exception ex) {
-                return Task.FromResult(Fail(request, ex.Message));
+                return Fail(request, ex.Message);
             }
         }
 
-        public Task<bool> PingAsync (CancellationToken cancellationToken) {
+        public async Task<bool> PingAsync (CancellationToken cancellationToken) {
             if (!IsConnected)
-                return Task.FromResult(false);
+                return false;
             try {
                 cancellationToken.ThrowIfCancellationRequested();
-                string resp = _session.Transact("RDD00000D00000");
-                return Task.FromResult(
-                    !string.IsNullOrEmpty(resp) && resp.IndexOf('!') < 0);
+                string resp = await _session.TransactAsync("RDD00000D00000", cancellationToken)
+                    .ConfigureAwait(false);
+                return !string.IsNullOrEmpty(resp) && resp.IndexOf('!') < 0;
             } catch {
-                return Task.FromResult(false);
+                return false;
             }
         }
 
-        /// <summary>真机范围：D00100D00101。</summary>
         private static string FormatDataRange (PanasonicAddress addr, int wordCount) {
-            if (wordCount < 1)
-                wordCount = 1;
+            if (wordCount < 1) wordCount = 1;
             char code = addr.Area == PanasonicArea.WR ? 'W' : 'D';
             int start = addr.Index;
             int end = start + wordCount - 1;
@@ -198,16 +177,12 @@ namespace Plugin.Panasonic {
         private static ushort[] ParseDataWords (string resp, int wordCount) {
             int idx = resp.IndexOf("$RD", StringComparison.OrdinalIgnoreCase);
             string data = idx >= 0 ? resp.Substring(idx + 3) : resp;
-
             var hex = new System.Text.StringBuilder();
             for (int i = 0; i < data.Length; i++) {
                 char c = data[i];
-                if ((c >= '0' && c <= '9') ||
-                    (c >= 'A' && c <= 'F') ||
-                    (c >= 'a' && c <= 'f'))
+                if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))
                     hex.Append(c);
             }
-
             string h = hex.ToString();
             int need = wordCount * 4;
             if (h.Length >= need + 2)
@@ -217,9 +192,7 @@ namespace Plugin.Panasonic {
 
             ushort[] words = new ushort[wordCount];
             for (int i = 0; i < wordCount; i++) {
-                ushort raw = ushort.Parse(
-                    h.Substring(i * 4, 4),
-                    System.Globalization.NumberStyles.HexNumber);
+                ushort raw = ushort.Parse(h.Substring(i * 4, 4), System.Globalization.NumberStyles.HexNumber);
                 words[i] = ProtocolCodecTools.SwapBytes(raw);
             }
             return words;
