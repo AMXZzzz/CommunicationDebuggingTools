@@ -1,4 +1,4 @@
-using CommunicationDebuggingTools.Business.Device;
+using CommunicationDebuggingTools.Services;
 using CommunicationDebuggingTools.Business.Persistence;
 using CommunicationDebuggingTools.Business.Variable;
 using CommunicationDebuggingTools.Core;
@@ -49,7 +49,14 @@ namespace CommunicationDebuggingTools {
             // ② 初始化（Load 与构造分离）；缓存单例，退出/心跳不再走已释放的 Services
             _deviceService = Services.GetRequiredService<IDeviceService>();
             _deviceService.Load();
-            Services.GetRequiredService<IVariableService>().Load();
+            var varSvc = Services.GetRequiredService<IVariableService>();
+            varSvc.Load();
+
+            // Remote 模式：启动 Watch 流保持集合实时
+            if (Services.GetService(typeof(RemoteDeviceService)) is RemoteDeviceService rds)
+                rds.StartWatch();
+            if (Services.GetService(typeof(RemoteVariableService)) is RemoteVariableService rvs)
+                rvs.StartWatch();
 
             // ③ 轮询引擎须在 UI 线程 Start（内部捕获 SynchronizationContext）
             _pollingEngine = Services.GetRequiredService<IPollingEngine>();
@@ -133,8 +140,46 @@ namespace CommunicationDebuggingTools {
             base.OnExit(e);
         }
 
-        // ── 服务注册 ─────────────────────────────────
+        // ── 服务注册（本地 / 远端双模式）───────────────
         private static IServiceProvider BuildServiceProvider () {
+            var settings = AppSettings.Load();
+            return settings.RemoteMode
+                ? BuildRemoteProvider(settings)
+                : BuildLocalProvider();
+        }
+
+        /// <summary>远端模式：所有业务服务经由 gRPC 代理到 EngineHost。</summary>
+        private static IServiceProvider BuildRemoteProvider (AppSettings settings) {
+            var sc = new ServiceCollection();
+
+            sc.AddSingleton<IAppLogger>(_ => new MemoryAppLogger(AppConfig.LogCapacity));
+            sc.AddSingleton<AppSettings>(_ => settings);
+
+            // gRPC 通道（单例，应用退出时 Dispose）
+            sc.AddSingleton(sp => {
+                var ch = new EngineHostChannel();
+                ch.Open(settings.HostAddress);
+                return ch;
+            });
+
+            // 远端代理（实现 IDeviceService / IVariableService）
+            sc.AddSingleton<RemoteDeviceService>();
+            sc.AddSingleton<IDeviceService>(sp => sp.GetRequiredService<RemoteDeviceService>());
+            sc.AddSingleton<RemoteVariableService>();
+            sc.AddSingleton<IVariableService>(sp => sp.GetRequiredService<RemoteVariableService>());
+
+            // 远端模式不需要 IPollingEngine（引擎在 Host 端跑）
+            // 注册一个空桩，避免 PollingEngine 依赖本地 Business
+            sc.AddSingleton<IPollingEngine, NullPollingEngine>();
+
+            RegisterPages(sc);
+            return sc.BuildServiceProvider();
+        }
+
+        /// <summary>本地模式：直接使用 Business 层（原有逻辑）。</summary>
+        private static IServiceProvider BuildLocalProvider () {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var sc = new ServiceCollection();
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var sc = new ServiceCollection();
 
@@ -168,21 +213,31 @@ namespace CommunicationDebuggingTools {
             sc.AddSingleton<IPollingEngine, PollingEngine>();
 
             // ── ViewModels（Transient）──
+            RegisterPages(sc);
+            return sc.BuildServiceProvider();
+        }
+
+        private static void RegisterPages (ServiceCollection sc) {
+            // ViewModels（Transient）
             sc.AddTransient<DevicePageViewModel>();
             sc.AddTransient<VariablePageViewModel>();
             sc.AddTransient<LogPageViewModel>();
-
-            // ── Pages（Transient）──
+            // Pages（Transient）
             sc.AddTransient<DevicePage>();
             sc.AddTransient<VariableConfigPage>();
             sc.AddTransient<LogPage>();
             sc.AddTransient<DataMonitorPage>();
             sc.AddTransient<SettingsPage>();
-
-            // ── 主窗口（Singleton）──
+            // 主窗口（Singleton）
             sc.AddSingleton<MainWindow>();
-
-            return sc.BuildServiceProvider();
         }
+    }
+
+    /// <summary>远端模式下的空轮询引擎桩（轮询由 EngineHost 负责）。</summary>
+    internal sealed class NullPollingEngine : IPollingEngine {
+        public bool IsRunning => false;
+        public event Action<string, bool> CycleCompleted { add { } remove { } }
+        public void Start () { }
+        public void Stop  () { }
     }
 }
