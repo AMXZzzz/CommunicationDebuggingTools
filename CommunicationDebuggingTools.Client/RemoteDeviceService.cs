@@ -116,11 +116,16 @@ namespace CommunicationDebuggingTools.Client {
         // ── 辅助 ─────────────────────────────────────
 
         private void RefreshDevices () {
-            var resp = _client.ListDevices(new ListDevicesRequest());
-            if (resp == null) return;
-            Devices.Clear();
-            foreach (DeviceDto dto in resp.Devices)
-                Devices.Add(FromDto(dto));
+            try {
+                var resp = _client.ListDevices(new ListDevicesRequest());
+                if (resp == null) return;
+                Devices.Clear();
+                foreach (DeviceDto dto in resp.Devices)
+                    Devices.Add(FromDto(dto));
+            } catch (Exception) {
+                // Host 未启动或网络不可达：保持空列表，不抛到 UI 线程导致闪退
+                Devices.Clear();
+            }
         }
 
         private void Post (Action action) {

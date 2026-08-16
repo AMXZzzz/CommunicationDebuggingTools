@@ -15,6 +15,7 @@ using CommunicationDebuggingTools.Business.Plugins;
 using CommunicationDebuggingTools.Business.Device;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Threading;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -54,9 +55,28 @@ namespace CommunicationDebuggingTools {
             var varSvc = Services.GetRequiredService<IVariableService>();
             varSvc.Load();
 
-            // Remote 模式：通过 EngineClient 启动 Watch 实时流
-            if (Services.GetService(typeof(EngineClient)) is EngineClient ec)
-                ec.StartWatch();
+            // Remote 模式：探测 Host；不可达时提示，不闪退。再启动 Watch。
+            if (Services.GetService(typeof(EngineClient)) is EngineClient ec) {
+                bool hostOk = false;
+                try {
+                    hostOk = ec.PingAsync(CancellationToken.None)
+                        .ConfigureAwait(false).GetAwaiter().GetResult();
+                } catch {
+                    hostOk = false;
+                }
+                if (!hostOk) {
+                    try {
+                        MessageBox.Show(
+                            "无法连接 EngineHost：\n" + (ec.Address ?? "") +
+                            "\n\n请先启动 CommunicationDebuggingTools.EngineHost，\n" +
+                            "或在「系统设置」切换为本地模式后重启应用。",
+                            "远端模式",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    } catch { }
+                }
+                try { ec.StartWatch(); } catch { }
+            }
 
             // ③ 轮询引擎须在 UI 线程 Start（内部捕获 SynchronizationContext）
             _pollingEngine = Services.GetRequiredService<IPollingEngine>();

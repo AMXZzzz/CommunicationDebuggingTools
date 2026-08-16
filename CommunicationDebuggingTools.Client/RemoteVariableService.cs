@@ -117,11 +117,16 @@ namespace CommunicationDebuggingTools.Client {
         // ── 辅助 ─────────────────────────────────────
 
         private void Refresh () {
-            var resp = _client.ListVariables(new ListVariablesRequest());
-            if (resp == null) return;
-            Variables.Clear();
-            foreach (VariableDto dto in resp.Variables)
-                Variables.Add(FromDto(dto));
+            try {
+                var resp = _client.ListVariables(new ListVariablesRequest());
+                if (resp == null) return;
+                Variables.Clear();
+                foreach (VariableDto dto in resp.Variables)
+                    Variables.Add(FromDto(dto));
+            } catch (Exception) {
+                // Host 未启动或网络不可达：保持空列表
+                Variables.Clear();
+            }
         }
 
         private void Post (Action a) {
