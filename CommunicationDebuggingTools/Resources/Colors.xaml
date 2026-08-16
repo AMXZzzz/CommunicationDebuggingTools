@@ -11,6 +11,7 @@
     <!-- ==================== 应用背景 / 边框 / 文字 ==================== -->
     <Color x:Key="SF.Color.Bg.App">#FF1E1E1E</Color>
     <Color x:Key="SF.Color.Bg.Surface">#FF252526</Color>
+    <Color x:Key="SF.Color.Bg.Card">#FF2A2A2E</Color>
     <Color x:Key="SF.Color.Bg.TopBar">#FF2D2D30</Color>
     <Color x:Key="SF.Color.Bg.Hover">#FF3E3E42</Color>
     <Color x:Key="SF.Color.Bg.Pressed">#FF2A2A2E</Color>
@@ -112,6 +113,7 @@
     <!-- 应用背景 / 边框 / 文字 -->
     <SolidColorBrush x:Key="SF.Brush.Bg.App" Color="{StaticResource SF.Color.Bg.App}"/>
     <SolidColorBrush x:Key="SF.Brush.Bg.Surface" Color="{StaticResource SF.Color.Bg.Surface}"/>
+    <SolidColorBrush x:Key="SF.Brush.Bg.Card" Color="{StaticResource SF.Color.Bg.Card}"/>
     <SolidColorBrush x:Key="SF.Brush.Bg.TopBar" Color="{StaticResource SF.Color.Bg.TopBar}"/>
     <SolidColorBrush x:Key="SF.Brush.Bg.Hover" Color="{StaticResource SF.Color.Bg.Hover}"/>
     <SolidColorBrush x:Key="SF.Brush.Bg.Pressed" Color="{StaticResource SF.Color.Bg.Pressed}"/>
