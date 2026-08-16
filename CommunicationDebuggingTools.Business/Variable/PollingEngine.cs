@@ -2,7 +2,6 @@
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Logging;
-using CommunicationDebuggingTools.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;

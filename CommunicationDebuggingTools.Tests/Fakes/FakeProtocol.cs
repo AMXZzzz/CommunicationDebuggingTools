@@ -1,6 +1,5 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using CommunicationDebuggingTools.Core.Attributes;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;

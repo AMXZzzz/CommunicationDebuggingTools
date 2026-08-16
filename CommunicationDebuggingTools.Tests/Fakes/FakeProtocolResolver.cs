@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Reflection;
-using CommunicationDebuggingTools.Core.Attributes;
 using CommunicationDebuggingTools.Core.Interfaces;
 
 namespace CommunicationDebuggingTools.Tests.Fakes {

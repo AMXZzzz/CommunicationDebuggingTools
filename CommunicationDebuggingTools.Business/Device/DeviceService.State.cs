@@ -84,6 +84,29 @@ namespace CommunicationDebuggingTools.Business.Device {
             return d;
         }
 
+
+        // ── 测试辅助（仅对 CommunicationDebuggingTools.Tests 可见）────
+
+        /// <summary>
+        /// 跳过 TcpProbe 和握手，直接把协议会话注入会话表并标记设备已连接。
+        /// 供单元测试使用，避免真实网络请求。
+        /// [assembly: InternalsVisibleTo("CommunicationDebuggingTools.Tests")] 已在 AssemblyInfo.cs 声明。
+        /// </summary>
+        internal void AttachSessionForTest (string deviceId, IProtocol protocol) {
+            if (string.IsNullOrEmpty(deviceId) || protocol == null)
+                throw new ArgumentException("deviceId 和 protocol 不能为空");
+
+            DeviceInfo device = Devices.FirstOrDefault(d => d != null && d.Id == deviceId);
+            if (device == null)
+                throw new InvalidOperationException("设备不存在: " + deviceId);
+
+            // 直接注入会话
+            _sessions[deviceId] = protocol;
+
+            // 标记已连接（绕过正常流程，仅测试用）
+            MarkConnected(device);
+        }
+
         /// <summary>
         /// 安全释放协议实例：先断开会话，再 Dispose 托管资源。
         /// IProtocol : IDisposable，直接调 Dispose（实现内部会先 Disconnect）。
