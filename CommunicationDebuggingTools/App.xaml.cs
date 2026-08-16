@@ -144,11 +144,12 @@ namespace CommunicationDebuggingTools {
             // ── 协议解析器 ──
             sc.AddSingleton<IProtocolResolver>(sp => {
                 string dir = Path.Combine(baseDir, "plugins");
-                var resolver = new ProtocolResolver();
+                var log = sp.GetRequiredService<IAppLogger>();
+                // 注入日志：单插件失败会 Warn，不再静默
+                var resolver = new ProtocolResolver(log);
                 resolver.LoadFromFolder(dir);
                 int n = resolver.GetProtocolNames()?.Count ?? 0;
-                sp.GetRequiredService<IAppLogger>()
-                  .Info("Protocol", "已加载协议 " + n + " 个，目录=" + dir);
+                log.Info("Protocol", "已加载协议 " + n + " 个，目录=" + dir);
                 return resolver;
             });
 

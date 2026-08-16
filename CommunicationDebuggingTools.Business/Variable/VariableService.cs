@@ -233,8 +233,12 @@ namespace CommunicationDebuggingTools.Business.Variable {
         private void CheckAndMarkDisconnected (string deviceId) {
             try {
                 IProtocol p = _devices.GetProtocol(deviceId);
-                if (p != null && !p.IsConnected) _devices.Disconnect(deviceId);
-            } catch { }
+                if (p != null && !p.IsConnected)
+                    _devices.Disconnect(deviceId);
+            } catch (Exception ex) {
+                // 清理路径：记录即可，避免二次异常冲掉主流程错误
+                LogWarn("检查断线失败: " + deviceId + " — " + ex.Message);
+            }
         }
 
         private void ValidateForUpsert (VariableItem item, string currentId) {

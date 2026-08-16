@@ -2,6 +2,8 @@
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using CommunicationDebuggingTools.Core.Tools;
+using System.Text;
 using System;
 using System.Globalization;
 using System.Threading;
@@ -68,14 +70,14 @@ namespace Plugin.SiemensS7 {
                 cancellationToken.ThrowIfCancellationRequested();
                 S7Address addr = SiemensS7Session.ParseAddress(request.Address);
                 byte ts = GetTransportSize(request.DataType, addr);
-                int elemCount = (request.DataType == VariableDataType.Double) ? 2 : 1;
+                int elemCount = GetElementCount(request.DataType, request.Length, request.StringEncoding);
 
                 byte[] job = BuildReadJob(addr, ts, elemCount, _session.NextRef());
                 byte[] resp = await _session.TransactAsync(job, cancellationToken)
                     .ConfigureAwait(false);
 
                 byte[] raw = ParseReadResponse(resp, ts, elemCount);
-                request.Value = FromS7Bytes(raw, request.DataType);
+                request.Value = FromS7Bytes(raw, request.DataType, request.StringEncoding);
                 request.Success = true;
                 request.Quality = DataQuality.Good;
                 request.ErrorMessage = "";
@@ -97,7 +99,8 @@ namespace Plugin.SiemensS7 {
                 cancellationToken.ThrowIfCancellationRequested();
                 S7Address addr = SiemensS7Session.ParseAddress(request.Address);
                 byte ts = GetTransportSize(request.DataType, addr);
-                byte[] data = ToS7Bytes(request.Value, request.DataType);
+                byte[] data = ToS7Bytes(
+                    request.Value, request.DataType, request.Length, request.StringEncoding);
 
                 byte[] job = BuildWriteJob(addr, ts, data, _session.NextRef());
                 byte[] resp = await _session.TransactAsync(job, cancellationToken)
@@ -141,6 +144,7 @@ namespace Plugin.SiemensS7 {
 
             byte rts = (ts == TS_BIT) ? (byte)0x03 : (byte)0x04;
             int bitLen = (ts == TS_BIT) ? 1 : data.Length * 8;
+            int elemCount = GetWriteElementCount(ts, data.Length);
             int pLen = 14;
             int dLen = 4 + data.Length;
 
@@ -154,7 +158,7 @@ namespace Plugin.SiemensS7 {
             pdu[i++] = 0x05; pdu[i++] = 0x01;
             pdu[i++] = 0x12; pdu[i++] = 0x0A; pdu[i++] = 0x10;
             pdu[i++] = ts;
-            pdu[i++] = 0x00; pdu[i++] = 0x01;
+            pdu[i++] = (byte)(elemCount >> 8); pdu[i++] = (byte)(elemCount & 0xFF);
             pdu[i++] = (byte)(addr.DbNumber >> 8); pdu[i++] = (byte)(addr.DbNumber & 0xFF);
             pdu[i++] = areaCode;
             pdu[i++] = (byte)(bitAddr >> 16); pdu[i++] = (byte)(bitAddr >> 8); pdu[i++] = (byte)(bitAddr & 0xFF);
@@ -216,7 +220,7 @@ namespace Plugin.SiemensS7 {
                 throw new Exception("写入失败，返回码 0x" + rc.ToString("X2"));
         }
 
-        static object FromS7Bytes (byte[] d, VariableDataType dt) {
+        static object FromS7Bytes (byte[] d, VariableDataType dt, StringEncodingKind encoding) {
             switch (dt) {
                 case VariableDataType.Bool:
                     return d[0] != 0x00;
@@ -236,12 +240,20 @@ namespace Plugin.SiemensS7 {
                     byte[] le = new byte[] { d[7], d[6], d[5], d[4], d[3], d[2], d[1], d[0] };
                     return BitConverter.ToDouble(le, 0);
                 }
+                case VariableDataType.String: {
+                    // 连续字节区原始串（非 S7 STRING 头）；去尾部 0x00
+                    Encoding enc = ProtocolCodecTools.ResolveEncoding(encoding);
+                    int end = d.Length;
+                    while (end > 0 && d[end - 1] == 0) end--;
+                    return end <= 0 ? "" : enc.GetString(d, 0, end);
+                }
                 default:
                     return d;
             }
         }
 
-        static byte[] ToS7Bytes (object value, VariableDataType dt) {
+        static byte[] ToS7Bytes (
+            object value, VariableDataType dt, int length, StringEncodingKind encoding) {
             switch (dt) {
                 case VariableDataType.Bool:
                     return new byte[] { (byte)(ToBool(value) ? 1 : 0) };
@@ -271,9 +283,46 @@ namespace Plugin.SiemensS7 {
                     byte[] le = BitConverter.GetBytes(ToDouble(value));
                     return new byte[] { le[7], le[6], le[5], le[4], le[3], le[2], le[1], le[0] };
                 }
+                case VariableDataType.String: {
+                    Encoding enc = ProtocolCodecTools.ResolveEncoding(encoding);
+                    string s = value != null ? value.ToString() : "";
+                    int maxChars = length > 0 ? length : s.Length;
+                    if (maxChars < 1) maxChars = 1;
+                    if (s.Length > maxChars) s = s.Substring(0, maxChars);
+                    byte[] raw = enc.GetBytes(s);
+                    int maxBytes = Math.Min(enc.GetMaxByteCount(maxChars), 240);
+                    byte[] buf = new byte[maxBytes];
+                    int copy = Math.Min(raw.Length, maxBytes);
+                    Array.Copy(raw, 0, buf, 0, copy);
+                    return buf;
+                }
                 default:
                     throw new Exception("不支持的数据类型写入: " + dt);
             }
+        }
+
+        /// <summary>读请求元素个数（字节/字/双字）。</summary>
+        static int GetElementCount (VariableDataType dt, int length, StringEncodingKind encoding) {
+            switch (dt) {
+                case VariableDataType.Double:
+                    return 2;
+                case VariableDataType.String: {
+                    int maxChars = length > 0 ? length : 1;
+                    Encoding enc = ProtocolCodecTools.ResolveEncoding(encoding);
+                    int bytes = Math.Min(enc.GetMaxByteCount(maxChars), 240);
+                    return bytes < 1 ? 1 : bytes;
+                }
+                default:
+                    return 1;
+            }
+        }
+
+        static int GetWriteElementCount (byte ts, int dataLength) {
+            if (ts == TS_BIT) return 1;
+            if (ts == TS_BYTE) return Math.Max(1, dataLength);
+            if (ts == TS_WORD) return Math.Max(1, dataLength / 2);
+            if (ts == TS_DWORD || ts == TS_REAL) return Math.Max(1, dataLength / 4);
+            return 1;
         }
 
         static byte GetTransportSize (VariableDataType dt, S7Address addr) {
@@ -285,6 +334,7 @@ namespace Plugin.SiemensS7 {
                 case VariableDataType.UInt32: return TS_DWORD;
                 case VariableDataType.Float: return TS_REAL;
                 case VariableDataType.Double: return TS_DWORD;
+                case VariableDataType.String: return TS_BYTE;
                 default:
                     switch (addr.Size) {
                         case S7TransportSize.Bit: return TS_BIT;

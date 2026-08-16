@@ -366,27 +366,47 @@ namespace Plugin.ModbusTcp {
         }
 
         private async Task WriteAllAsync (byte[] data, CancellationToken ct) {
-            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
-                linked.CancelAfter(TimeoutMs);
-                await _stream.WriteAsync(data, 0, data.Length, linked.Token).ConfigureAwait(false);
-                await _stream.FlushAsync(linked.Token).ConfigureAwait(false);
+            try {
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                    linked.CancelAfter(TimeoutMs);
+                    await _stream.WriteAsync(data, 0, data.Length, linked.Token).ConfigureAwait(false);
+                    await _stream.FlushAsync(linked.Token).ConfigureAwait(false);
+                }
+            } catch (OperationCanceledException) {
+                // 超时/取消后强拆，避免半开连接
+                Disconnect();
+                throw;
+            } catch {
+                Disconnect();
+                throw;
             }
         }
 
         private async Task<byte[]> ReadExactAsync (int size, CancellationToken ct) {
             var buf = new byte[size];
             int offset = 0;
-            while (offset < size) {
-                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
-                    linked.CancelAfter(TimeoutMs);
-                    int n = await _stream.ReadAsync(buf, offset, size - offset, linked.Token)
-                        .ConfigureAwait(false);
-                    if (n <= 0)
-                        throw new Exception("连接已断开或读超时");
-                    offset += n;
+            try {
+                while (offset < size) {
+                    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                        linked.CancelAfter(TimeoutMs);
+                        int n = await _stream.ReadAsync(buf, offset, size - offset, linked.Token)
+                            .ConfigureAwait(false);
+                        if (n <= 0) {
+                            Disconnect();
+                            throw new Exception("连接已断开或读超时");
+                        }
+                        offset += n;
+                    }
                 }
+                return buf;
+            } catch (OperationCanceledException) {
+                Disconnect();
+                throw;
+            } catch (Exception) {
+                if (offset < size)
+                    Disconnect();
+                throw;
             }
-            return buf;
         }
 
         private static void CheckException (byte[] resp) {

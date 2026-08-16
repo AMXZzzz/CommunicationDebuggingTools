@@ -173,10 +173,18 @@ namespace Plugin.SiemensS7 {
             pkt[2] = (byte)(total >> 8);
             pkt[3] = (byte)(total & 0xFF);
             Array.Copy(payload, 0, pkt, 4, payload.Length);
-            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
-                linked.CancelAfter(TimeoutMs);
-                await _stream.WriteAsync(pkt, 0, pkt.Length, linked.Token).ConfigureAwait(false);
-                await _stream.FlushAsync(linked.Token).ConfigureAwait(false);
+            try {
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                    linked.CancelAfter(TimeoutMs);
+                    await _stream.WriteAsync(pkt, 0, pkt.Length, linked.Token).ConfigureAwait(false);
+                    await _stream.FlushAsync(linked.Token).ConfigureAwait(false);
+                }
+            } catch (OperationCanceledException) {
+                Disconnect();
+                throw;
+            } catch {
+                Disconnect();
+                throw;
             }
         }
 
@@ -192,16 +200,28 @@ namespace Plugin.SiemensS7 {
         async Task<byte[]> ReadExactAsync (int count, CancellationToken ct) {
             byte[] buf = new byte[count];
             int read = 0;
-            while (read < count) {
-                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
-                    linked.CancelAfter(TimeoutMs);
-                    int n = await _stream.ReadAsync(buf, read, count - read, linked.Token)
-                        .ConfigureAwait(false);
-                    if (n == 0) throw new Exception("连接已关闭");
-                    read += n;
+            try {
+                while (read < count) {
+                    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                        linked.CancelAfter(TimeoutMs);
+                        int n = await _stream.ReadAsync(buf, read, count - read, linked.Token)
+                            .ConfigureAwait(false);
+                        if (n == 0) {
+                            Disconnect();
+                            throw new Exception("连接已关闭");
+                        }
+                        read += n;
+                    }
                 }
+                return buf;
+            } catch (OperationCanceledException) {
+                Disconnect();
+                throw;
+            } catch (Exception) {
+                if (read < count)
+                    Disconnect();
+                throw;
             }
-            return buf;
         }
 
         // ════════════════════════════════════════════════
