@@ -32,7 +32,7 @@ namespace CommunicationDebuggingTools.EngineHost {
             // 仅此一处监听；不要在 appsettings.json 再配 Kestrel:Endpoints
             builder.WebHost.ConfigureKestrel(options => {
                 options.ListenLocalhost(DefaultPort, o => {
-                    o.Protocols = HttpProtocols.Http2;
+                    o.Protocols = HttpProtocols.Http1AndHttp2;
                 });
             });
 
