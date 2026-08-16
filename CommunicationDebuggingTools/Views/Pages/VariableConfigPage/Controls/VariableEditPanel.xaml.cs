@@ -14,6 +14,8 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         public event Action CloseRequested;
         public event Action SaveRequested;
         public event Action DeleteRequested;
+        /// <summary>校验/提示：(标题, 正文)，由页面用主题对话框展示。</summary>
+        public event Action<string, string> InfoRequested;
 
         private string _editingId;
         private VariableAccess _access = VariableAccess.ReadOnly;
@@ -189,8 +191,17 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
         private void Root_MouseLeftButtonDown (object sender, MouseButtonEventArgs e) =>
             e.Handled = true;
 
-        private void BtnSave_Click (object sender, RoutedEventArgs e) =>
+        private void BtnSave_Click (object sender, RoutedEventArgs e) {
+            if (string.IsNullOrWhiteSpace(txtName != null ? txtName.Text : null)) {
+                InfoRequested?.Invoke("提示", "请填写显示名称");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(txtAddress != null ? txtAddress.Text : null)) {
+                InfoRequested?.Invoke("提示", "请填写地址");
+                return;
+            }
             SaveRequested?.Invoke();
+        }
 
         private void BtnDelete_Click (object sender, RoutedEventArgs e) =>
             DeleteRequested?.Invoke();
