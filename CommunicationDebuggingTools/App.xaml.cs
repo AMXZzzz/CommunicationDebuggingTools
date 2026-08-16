@@ -12,6 +12,7 @@ using CommunicationDebuggingTools.Views.Pages.Monitor;
 using CommunicationDebuggingTools.Views.Pages.Settings;
 using CommunicationDebuggingTools.Views.VariableConfigPage;
 using CommunicationDebuggingTools.Business.Plugins;
+using CommunicationDebuggingTools.Business.Device;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
@@ -175,8 +176,6 @@ namespace CommunicationDebuggingTools {
 
         /// <summary>本地模式：直接使用 Business 层（原有逻辑）。</summary>
         private static IServiceProvider BuildLocalProvider () {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var sc = new ServiceCollection();
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var sc = new ServiceCollection();
 
