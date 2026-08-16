@@ -3,7 +3,7 @@ syntax = "proto3";
 package sf.engine.v1;
 option csharp_namespace = "CommunicationDebuggingTools.Contracts.V1";
 
-message OperationResult {
+message RpcResult {
   bool ok = 1;
   string message = 2;
   string error_code = 3;
@@ -31,15 +31,15 @@ message DeviceDto {
 message ListDevicesRequest {}
 message ListDevicesResponse { repeated DeviceDto devices = 1; }
 message UpsertDeviceRequest { DeviceDto device = 1; }
-message UpsertDeviceResponse { DeviceDto device = 1; OperationResult result = 2; }
+message UpsertDeviceResponse { DeviceDto device = 1; RpcResult result = 2; }
 message DeleteDeviceRequest { string id = 1; }
-message DeleteDeviceResponse { OperationResult result = 1; }
+message DeleteDeviceResponse { RpcResult result = 1; }
 message ConnectRequest { string id = 1; }
-message ConnectResponse { OperationResult result = 1; DeviceDto device = 2; }
+message ConnectResponse { RpcResult result = 1; DeviceDto device = 2; }
 message DisconnectRequest { string id = 1; }
-message DisconnectResponse { OperationResult result = 1; DeviceDto device = 2; }
+message DisconnectResponse { RpcResult result = 1; DeviceDto device = 2; }
 message DisconnectAllRequest {}
-message DisconnectAllResponse { OperationResult result = 1; }
+message DisconnectAllResponse { RpcResult result = 1; }
 message DeviceEvent {
   string device_id = 1;
   DeviceDto device = 2;
@@ -65,13 +65,13 @@ message VariableDto {
 message ListVariablesRequest { string device_id = 1; }
 message ListVariablesResponse { repeated VariableDto variables = 1; }
 message UpsertVariableRequest { VariableDto variable = 1; }
-message UpsertVariableResponse { VariableDto variable = 1; OperationResult result = 2; }
+message UpsertVariableResponse { VariableDto variable = 1; RpcResult result = 2; }
 message DeleteVariableRequest { string id = 1; }
-message DeleteVariableResponse { OperationResult result = 1; }
+message DeleteVariableResponse { RpcResult result = 1; }
 message ReadVariableRequest { string id = 1; }
-message ReadVariableResponse { OperationResult result = 1; VariableDto variable = 2; }
+message ReadVariableResponse { RpcResult result = 1; VariableDto variable = 2; }
 message WriteVariableRequest { string id = 1; string value = 2; }
-message WriteVariableResponse { OperationResult result = 1; VariableDto variable = 2; }
+message WriteVariableResponse { RpcResult result = 1; VariableDto variable = 2; }
 message VariableValueEvent {
   string variable_id = 1;
   string device_id = 2;

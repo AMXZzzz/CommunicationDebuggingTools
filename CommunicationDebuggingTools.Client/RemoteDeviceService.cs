@@ -8,7 +8,6 @@ using CommunicationDebuggingTools.Contracts.V1;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
-using CoreOp = CommunicationDebuggingTools.Core.Models.OperationResult;
 
 namespace CommunicationDebuggingTools.Client {
 

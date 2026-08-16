@@ -10,7 +10,6 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using Grpc.Core;
-using CoreOp = CommunicationDebuggingTools.Core.Models.OperationResult;
 
 namespace CommunicationDebuggingTools.EngineHost.Services {
 
@@ -253,10 +252,10 @@ namespace CommunicationDebuggingTools.EngineHost.Services {
                 Quality = v.Quality.ToString(), LastError = v.LastError ?? ""
             };
 
-        private static Contracts.V1.OperationResult Ok() =>
-            new Contracts.V1.OperationResult { Ok = true, Message = "", ErrorCode = "" };
-        private static Contracts.V1.OperationResult Fail(string msg, string code) =>
-            new Contracts.V1.OperationResult { Ok = false, Message = msg ?? "", ErrorCode = code ?? "UNKNOWN" };
+        private static RpcResult Ok() =>
+            new RpcResult { Ok = true, Message = "", ErrorCode = "" };
+        private static RpcResult Fail(string msg, string code) =>
+            new RpcResult { Ok = false, Message = msg ?? "", ErrorCode = code ?? "UNKNOWN" };
 
         private static DeviceDto ToDto(DeviceInfo d) {
             if (d == null) return new DeviceDto();
