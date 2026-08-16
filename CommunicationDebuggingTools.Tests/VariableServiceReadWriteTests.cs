@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Variable;
@@ -27,6 +26,7 @@ namespace CommunicationDebuggingTools.Tests {
         public void Setup () {
             _protocol = new FakeProtocol {
                 ConnectResult = true,
+                IsConnected = true,   // 绕过 ConnectAsync，直接预置为已连接
                 ReadResult = true,
                 ReadValue = (short)55,
                 WriteResult = true

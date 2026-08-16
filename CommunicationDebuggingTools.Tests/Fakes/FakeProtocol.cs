@@ -39,7 +39,8 @@ namespace CommunicationDebuggingTools.Tests.Fakes {
             return Task.FromResult(PingResult);
         }
 
-        public bool IsConnected { get; private set; }
+        /// <summary>测试时可直接赋值，无需经 ConnectAsync。</summary>
+        public bool IsConnected { get; set; }
 
         public Task<bool> ConnectAsync (
             ProtocolConnectionContext context,

@@ -1,11 +1,12 @@
-﻿using CommunicationDebuggingTools.Core;
+﻿
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Tools;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Plugin.Panasonic {
     /// <summary>
