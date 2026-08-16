@@ -5,9 +5,18 @@
 
 <PageTitle>设备管理</PageTitle>
 
-<h3>设备管理</h3>
+<div class="page-titlebar">
+    <div>
+        <h3>设备管理</h3>
+        <div class="page-subtitle">管理设备连接、参数与在线状态</div>
+    </div>
+    <div class="status-chip @(Gateway.IsConnected ? "ok" : "error")">
+        @(Gateway.IsConnected ? "EngineHost 在线" : "EngineHost 离线")
+    </div>
+</div>
+
 <div class="card-panel">
-    <div class="btn-row" style="margin-bottom:12px;">
+    <div class="page-actions">
         <button class="primary" @onclick="OpenAddDialog">新增设备</button>
         <button class="success" @onclick="ConnectAllAsync">全部连接</button>
         <button class="danger" @onclick="DisconnectAllAsync">全部断开</button>
@@ -21,9 +30,10 @@
     </div>
 
     @if (!string.IsNullOrWhiteSpace(_notice)) {
-        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")" style="margin-bottom:10px;">@_notice</div>
+        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")">@_notice</div>
     }
 
+    <div class="panel-title">设备列表</div>
     <div class="table-wrap">
         <table>
             <thead>

@@ -9,9 +9,18 @@
 
 <PageTitle>变量配置</PageTitle>
 
-<h3>变量配置</h3>
+<div class="page-titlebar">
+    <div>
+        <h3>变量配置</h3>
+        <div class="page-subtitle">统一管理变量读写、质量与批量导入导出</div>
+    </div>
+    <div class="status-chip @(Gateway.IsConnected ? "ok" : "error")">
+        @(Gateway.IsConnected ? "EngineHost 在线" : "EngineHost 离线")
+    </div>
+</div>
+
 <div class="card-panel">
-    <div class="btn-row" style="margin-bottom:12px;">
+    <div class="page-actions">
         <button class="primary" @onclick="OpenAddDialog">新增变量</button>
         <button @onclick="RefreshAsync">刷新</button>
         <button @onclick="ExportCsvAsync">导出CSV</button>
@@ -26,9 +35,10 @@
     </div>
 
     @if (!string.IsNullOrWhiteSpace(_notice)) {
-        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")" style="margin-bottom:10px;">@_notice</div>
+        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")">@_notice</div>
     }
 
+    <div class="panel-title">变量列表</div>
     <div class="table-wrap">
         <table>
             <thead>

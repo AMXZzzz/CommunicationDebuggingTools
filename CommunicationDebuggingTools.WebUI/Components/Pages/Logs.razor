@@ -4,17 +4,22 @@
 
 <PageTitle>日志</PageTitle>
 
-<h3>日志</h3>
+<div class="page-titlebar">
+    <div>
+        <h3>日志</h3>
+        <div class="page-subtitle">查看 EngineHost 同步与操作日志</div>
+    </div>
+    <div class="status-chip @(Gateway.IsConnected ? "ok" : "error")">
+        @(Gateway.IsConnected ? "EngineHost 在线" : "EngineHost 离线")
+    </div>
+</div>
+
 <div class="card-panel">
-    <div class="btn-row" style="margin-bottom:12px;">
+    <div class="page-actions">
         <button @onclick="RefreshAsync">刷新</button>
     </div>
 
-    <div class="small" style="margin-bottom:8px;">
-        EngineHost 状态：
-        <span class="@(Gateway.IsConnected ? "ok" : "error")">@(Gateway.IsConnected ? "在线" : "离线")</span>
-    </div>
-
+    <div class="panel-title">日志列表</div>
     <div class="table-wrap">
         <table>
             <thead>
