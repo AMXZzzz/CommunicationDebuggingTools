@@ -1,10 +1,11 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CommunicationDebuggingTools.Core.Attributes;
+﻿using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Plugin.Panasonic {
     /// <summary>
@@ -37,7 +38,7 @@ namespace Plugin.Panasonic {
 
             try {
                 int port = context.Port > 0 ? context.Port : 9094;
-                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : AppConfig.DefaultTimeoutMs;
                 await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken)
                     .ConfigureAwait(false);
                 return true;

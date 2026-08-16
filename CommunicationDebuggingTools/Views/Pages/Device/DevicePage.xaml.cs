@@ -46,6 +46,7 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             _vm.DisplayList.CollectionChanged += DisplayList_CollectionChanged;
             Loaded += (_, __) => InjectServicesToCards();
             Unloaded += DevicePage_Unloaded;
+            editPanel.ProtocolResolver = _protocols;
         }
 
         private void DisplayList_CollectionChanged (object sender, NotifyCollectionChangedEventArgs e) {

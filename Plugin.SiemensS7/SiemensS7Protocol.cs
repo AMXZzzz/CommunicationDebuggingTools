@@ -1,11 +1,12 @@
-﻿using System;
-using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using CommunicationDebuggingTools.Core.Attributes;
+using CommunicationDebuggingTools.Core.Config;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
-using CommunicationDebuggingTools.Core.Attributes;
+using System;
+using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Plugin.SiemensS7 {
     /// <summary>
@@ -45,7 +46,6 @@ namespace Plugin.SiemensS7 {
         const byte AREA_DB = 0x84;
 
         public bool IsConnected => _session.IsConnected;
-        public string GetProtocolName () => "Siemens S7";
 
         // ════════════════════════════════════════════════
         //  连接 / 断开
@@ -65,7 +65,7 @@ namespace Plugin.SiemensS7 {
 
             try {
                 int port = context.Port > 0 ? context.Port : 102;
-                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : 3000;
+                int timeout = context.TimeoutMs > 0 ? context.TimeoutMs : AppConfig.DefaultTimeoutMs;
                 await _session.ConnectAsync(context.Ip, port, timeout, cancellationToken);
                 return true;
             } catch {
