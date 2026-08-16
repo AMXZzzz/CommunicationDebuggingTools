@@ -16,7 +16,7 @@ namespace Plugin.ModbusTcp {
         private NetworkStream _stream;
         private byte _unitId = 1;
         private ushort _transactionId;
-        private readonly object _sync = new object();
+        private readonly SemaphoreSlim _io = new SemaphoreSlim(1, 1);
         private int _timeoutMs = AppConfig.DefaultTimeoutMs;
         private bool _disposed;
 
@@ -67,8 +67,6 @@ namespace Plugin.ModbusTcp {
             }
 
             _stream = _tcp.GetStream();
-            _stream.ReadTimeout = TimeoutMs;
-            _stream.WriteTimeout = TimeoutMs;
         }
 
         public void Disconnect () {
@@ -79,7 +77,7 @@ namespace Plugin.ModbusTcp {
         // -------------------- 功能码 --------------------
 
         /// <summary>读保持寄存器 FC03。</summary>
-        public ushort[] ReadHoldingRegisters (int address, int count) {
+        public async Task<ushort[]> ReadHoldingRegistersAsync (int address, int count, CancellationToken ct) {
             EnsureConnected();
             if (count < 1 || count > 125)
                 throw new ArgumentOutOfRangeException("count");
@@ -91,7 +89,7 @@ namespace Plugin.ModbusTcp {
                 (byte)(count >> 8), (byte)(count & 0xFF)
             };
 
-            byte[] resp = SendAndReceive(pdu);
+            byte[] resp = await SendAndReceiveAsync(pdu, ct).ConfigureAwait(false);
             CheckException(resp);
 
             if (resp[8] != count * 2)
@@ -106,7 +104,7 @@ namespace Plugin.ModbusTcp {
         }
 
         /// <summary>写单寄存器 FC06。</summary>
-        public void WriteSingleRegister (int address, ushort value) {
+        public async Task WriteSingleRegisterAsync (int address, ushort value, CancellationToken ct) {
             EnsureConnected();
             byte[] pdu =
             {
@@ -114,11 +112,11 @@ namespace Plugin.ModbusTcp {
                 (byte)(address >> 8), (byte)(address & 0xFF),
                 (byte)(value >> 8), (byte)(value & 0xFF)
             };
-            CheckException(SendAndReceive(pdu));
+            CheckException(await SendAndReceiveAsync(pdu, ct).ConfigureAwait(false));
         }
 
         /// <summary>写多寄存器 FC16。</summary>
-        public void WriteMultipleRegisters (int address, ushort[] values) {
+        public async Task WriteMultipleRegistersAsync (int address, ushort[] values, CancellationToken ct) {
             EnsureConnected();
             if (values == null || values.Length < 1 || values.Length > 123)
                 throw new ArgumentOutOfRangeException("values");
@@ -135,11 +133,11 @@ namespace Plugin.ModbusTcp {
                 pdu[6 + i * 2] = (byte)(values[i] >> 8);
                 pdu[7 + i * 2] = (byte)(values[i] & 0xFF);
             }
-            CheckException(SendAndReceive(pdu));
+            CheckException(await SendAndReceiveAsync(pdu, ct).ConfigureAwait(false));
         }
 
         /// <summary>读线圈 FC01。</summary>
-        public bool[] ReadCoils (int address, int count) {
+        public async Task<bool[]> ReadCoilsAsync (int address, int count, CancellationToken ct) {
             EnsureConnected();
             if (count < 1 || count > 2000)
                 throw new ArgumentOutOfRangeException("count");
@@ -151,7 +149,7 @@ namespace Plugin.ModbusTcp {
                 (byte)(count >> 8), (byte)(count & 0xFF)
             };
 
-            byte[] resp = SendAndReceive(pdu);
+            byte[] resp = await SendAndReceiveAsync(pdu, ct).ConfigureAwait(false);
             CheckException(resp);
 
             var coils = new bool[count];
@@ -161,7 +159,7 @@ namespace Plugin.ModbusTcp {
         }
 
         /// <summary>写单线圈 FC05。</summary>
-        public void WriteSingleCoil (int address, bool value) {
+        public async Task WriteSingleCoilAsync (int address, bool value, CancellationToken ct) {
             EnsureConnected();
             byte[] pdu =
             {
@@ -170,7 +168,7 @@ namespace Plugin.ModbusTcp {
                 value ? (byte)0xFF : (byte)0x00,
                 0x00
             };
-            CheckException(SendAndReceive(pdu));
+            CheckException(await SendAndReceiveAsync(pdu, ct).ConfigureAwait(false));
         }
 
         // -------------------- 地址 --------------------
@@ -189,7 +187,7 @@ namespace Plugin.ModbusTcp {
             throw new ArgumentException("无法解析的 Modbus 地址: " + address);
         }
 
-        // -------------------- 数值 ↔ 寄存器（统一管道）--------------------
+        // -------------------- 数值 ↔ 寄存器 --------------------
 
         public static int RegistersToInt32 (ushort high, ushort low, bool highWordFirst) =>
             RegistersToValue2(high, low, highWordFirst, BitConverter.ToInt32);
@@ -264,7 +262,6 @@ namespace Plugin.ModbusTcp {
             }
         }
 
-        /// <summary>已按字序排好的寄存器 → 本机字节序缓冲。</summary>
         private static byte[] PackWords (ushort[] ordered) {
             var bytes = new byte[ordered.Length * 2];
             for (int i = 0; i < ordered.Length; i++) {
@@ -276,7 +273,6 @@ namespace Plugin.ModbusTcp {
             return bytes;
         }
 
-        /// <summary>本机 GetBytes 结果 → 大端字数组。</summary>
         private static ushort[] UnpackWords (byte[] hostBytes, int wordCount) {
             byte[] bytes = (byte[])hostBytes.Clone();
             if (BitConverter.IsLittleEndian)
@@ -335,8 +331,9 @@ namespace Plugin.ModbusTcp {
                 throw new InvalidOperationException("未连接");
         }
 
-        private byte[] SendAndReceive (byte[] pdu) {
-            lock (_sync) {
+        private async Task<byte[]> SendAndReceiveAsync (byte[] pdu, CancellationToken ct) {
+            await _io.WaitAsync(ct).ConfigureAwait(false);
+            try {
                 EnsureConnected();
                 _transactionId++;
                 ushort tid = _transactionId;
@@ -351,30 +348,43 @@ namespace Plugin.ModbusTcp {
                 frame[6] = _unitId;
                 Buffer.BlockCopy(pdu, 0, frame, 7, pdu.Length);
 
-                _stream.Write(frame, 0, frame.Length);
-                _stream.Flush();
+                await WriteAllAsync(frame, ct).ConfigureAwait(false);
 
-                byte[] header = ReadExact(7);
+                byte[] header = await ReadExactAsync(7, ct).ConfigureAwait(false);
                 int pduLen = ((header[4] << 8) | header[5]) - 1;
                 if (pduLen < 2)
                     throw new Exception("PDU 长度非法");
 
-                byte[] body = ReadExact(pduLen);
+                byte[] body = await ReadExactAsync(pduLen, ct).ConfigureAwait(false);
                 var resp = new byte[7 + pduLen];
                 Buffer.BlockCopy(header, 0, resp, 0, 7);
                 Buffer.BlockCopy(body, 0, resp, 7, pduLen);
                 return resp;
+            } finally {
+                _io.Release();
             }
         }
 
-        private byte[] ReadExact (int size) {
+        private async Task WriteAllAsync (byte[] data, CancellationToken ct) {
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                linked.CancelAfter(TimeoutMs);
+                await _stream.WriteAsync(data, 0, data.Length, linked.Token).ConfigureAwait(false);
+                await _stream.FlushAsync(linked.Token).ConfigureAwait(false);
+            }
+        }
+
+        private async Task<byte[]> ReadExactAsync (int size, CancellationToken ct) {
             var buf = new byte[size];
             int offset = 0;
             while (offset < size) {
-                int n = _stream.Read(buf, offset, size - offset);
-                if (n <= 0)
-                    throw new Exception("连接已断开或读超时");
-                offset += n;
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                    linked.CancelAfter(TimeoutMs);
+                    int n = await _stream.ReadAsync(buf, offset, size - offset, linked.Token)
+                        .ConfigureAwait(false);
+                    if (n <= 0)
+                        throw new Exception("连接已断开或读超时");
+                    offset += n;
+                }
             }
             return buf;
         }
@@ -390,6 +400,7 @@ namespace Plugin.ModbusTcp {
             if (_disposed) return;
             _disposed = true;
             Disconnect();
+            try { _io.Dispose(); } catch { }
         }
     }
 }
