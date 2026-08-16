@@ -9,7 +9,7 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
-namespace CommunicationDebuggingTools.Services {
+namespace CommunicationDebuggingTools.Client {
 
     /// <summary>
     /// IDeviceService 的 gRPC 代理实现（Remote 模式）。
@@ -24,14 +24,18 @@ namespace CommunicationDebuggingTools.Services {
         public ObservableCollection<DeviceInfo> Devices { get; } =
             new ObservableCollection<DeviceInfo>();
 
-        public RemoteDeviceService (EngineHostChannel channel) {
+        public RemoteDeviceService (EngineHostChannel channel, SynchronizationContext ui = null) {
             _client = channel.Client;
-            _ui     = SynchronizationContext.Current;
+            _ui     = ui ?? SynchronizationContext.Current;
         }
 
         // ── 生命周期 ──────────────────────────────────
 
         /// <summary>启动 WatchDevices 后台流，保持 Devices 集合实时。</summary>
+        public void StopWatch () {
+            _watchCts?.Cancel();
+        }
+
         public void StartWatch () {
             _watchCts?.Cancel();
             _watchCts = new CancellationTokenSource();

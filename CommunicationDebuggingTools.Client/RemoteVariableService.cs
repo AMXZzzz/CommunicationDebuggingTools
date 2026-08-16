@@ -9,7 +9,7 @@ using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
-namespace CommunicationDebuggingTools.Services {
+namespace CommunicationDebuggingTools.Client {
 
     /// <summary>
     /// IVariableService 的 gRPC 代理实现（Remote 模式）。
@@ -24,9 +24,13 @@ namespace CommunicationDebuggingTools.Services {
         public ObservableCollection<VariableItem> Variables { get; } =
             new ObservableCollection<VariableItem>();
 
-        public RemoteVariableService (EngineHostChannel channel) {
+        public RemoteVariableService (EngineHostChannel channel, SynchronizationContext ui = null) {
             _client = channel.Client;
-            _ui     = SynchronizationContext.Current;
+            _ui     = ui ?? SynchronizationContext.Current;
+        }
+
+        public void StopWatch () {
+            _watchCts?.Cancel();
         }
 
         public void StartWatch () {

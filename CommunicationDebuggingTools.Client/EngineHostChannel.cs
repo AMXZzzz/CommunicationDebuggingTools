@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using CommunicationDebuggingTools.Contracts.V1;
 using Grpc.Net.Client;
 
-namespace CommunicationDebuggingTools.Services {
+namespace CommunicationDebuggingTools.Client {
 
     /// <summary>
     /// 管理与 EngineHost 的 gRPC 通道生命周期。
