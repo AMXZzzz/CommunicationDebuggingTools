@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using CommunicationDebuggingTools.Core.Enums;
 
 namespace CommunicationDebuggingTools.Core.Models {
@@ -63,7 +63,7 @@ namespace CommunicationDebuggingTools.Core.Models {
         }
 
         /// <summary>
-        /// 协议显示名，须与插件 <c>GetProtocolName()</c>、解析器注册名一致
+        /// 协议显示名，须与插件 <c>[ProtocolName]</c> 标注名、解析器注册名完全一致
         /// （如 "Modbus TCP"、"Panasonic MEWTOCOL"）。
         /// </summary>
         public string Protocol {
@@ -98,7 +98,7 @@ namespace CommunicationDebuggingTools.Core.Models {
         /// <summary>
         /// 站号（架构级共性字段）。
         /// UI 标签统一为「站号」；连接时拷贝到 <see cref="ProtocolConnectionContext.StationNo"/>。
-        /// 语义仅由插件解释（Modbus→UnitId，松下→站号等）。默认 1。
+        /// 站号（Modbus 从站、松下站号等）；仅插件解释语义。默认 1。
         /// </summary>
         public int StationNo {
             get { return _stationNo; }

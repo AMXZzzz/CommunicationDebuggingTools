@@ -1,4 +1,4 @@
-﻿using System.Threading;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Interfaces;
@@ -10,6 +10,7 @@ namespace CommunicationDebuggingTools.Tests.Fakes {
     public class FakeProtocol : IProtocol {
         public bool ConnectResult { get; set; } = true;
         public int ConnectCallCount { get; private set; }
+        public int DisconnectCallCount { get; private set; }
         public ProtocolConnectionContext LastContext { get; private set; }
 
         /// <summary>读是否成功。</summary>
@@ -51,7 +52,10 @@ namespace CommunicationDebuggingTools.Tests.Fakes {
             return Task.FromResult(IsConnected);
         }
 
-        public void Disconnect () => IsConnected = false;
+        public void Disconnect () {
+            DisconnectCallCount++;
+            IsConnected = false;
+        }
 
         private bool _disposed;
         public void Dispose () {

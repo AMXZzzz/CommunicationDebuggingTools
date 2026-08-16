@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="CommunicationDebuggingTools.Views.Pages.Device.DeviceEditPanel"
+<UserControl x:Class="CommunicationDebuggingTools.Views.Pages.Device.DeviceEditPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="400">
@@ -140,11 +140,11 @@
                                      FontFamily="Consolas"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="站号 / Unit ID"
+                            <TextBlock Text="站号"
                                        FontSize="12"
                                        Foreground="{StaticResource SF.Brush.Text.Secondary}"
                                        Margin="0,0,0,4"/>
-                            <TextBox x:Name="txtUnitId"
+                            <TextBox x:Name="txtStationNo"
                                      Style="{StaticResource SF.Style.DialogTextBox}"
                                      FontFamily="Consolas"/>
                         </StackPanel>

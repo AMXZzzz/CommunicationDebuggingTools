@@ -52,6 +52,8 @@
     <Compile Include="DeviceServiceConnectTests.cs" />
     <Compile Include="Fakes\FakeDeviceRepository.cs" />
     <Compile Include="Fakes\FakeProtocol.cs" />
+    <Compile Include="Fakes\FakeTcpProbe.cs" />
+    <Compile Include="JsonDeviceRepositoryTests.cs" />
     <Compile Include="Fakes\FakeProtocolResolver.cs" />
     <Compile Include="Fakes\FakeVariableRepository.cs" />
     <Compile Include="PanasonicAddressParseTests.cs" />

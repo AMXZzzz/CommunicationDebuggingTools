@@ -1,4 +1,4 @@
-﻿using CommunicationDebuggingTools.Business.Device;
+using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Persistence;
 using CommunicationDebuggingTools.Business.Variable;
 using CommunicationDebuggingTools.Core;
@@ -162,6 +162,7 @@ namespace CommunicationDebuggingTools {
                     Path.Combine(baseDir, "config", "variables.json")));
 
             // ── 业务服务（Singleton）──
+            sc.AddSingleton<ITcpProbe, TcpProbe>();
             sc.AddSingleton<IDeviceService, DeviceService>();
             sc.AddSingleton<IVariableService, VariableService>();
             sc.AddSingleton<IPollingEngine, PollingEngine>();

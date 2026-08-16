@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -81,9 +81,9 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
             if (txtPort != null)
                 txtPort.Text = info.Port.ToString();
 
-            // 站号：只绑 StationNo（控件名可为 txtUnitId，语义是站号）
-            if (txtUnitId != null)
-                txtUnitId.Text = info.StationNo.ToString();
+            // 站号：只绑 StationNo（控件名可为 txtStationNo，语义是站号）
+            if (txtStationNo != null)
+                txtStationNo.Text = info.StationNo.ToString();
 
             if (txtStatus != null) {
                 txtStatus.Text = info.StatusText ?? "离线";
@@ -109,8 +109,8 @@ namespace CommunicationDebuggingTools.Views.Pages.Device {
                 : 502;
 
             int station = 1;
-            if (txtUnitId != null)
-                int.TryParse(txtUnitId.Text.Trim(), out station);
+            if (txtStationNo != null)
+                int.TryParse(txtStationNo.Text.Trim(), out station);
             if (station < 0)
                 station = 0;
             d.StationNo = station;

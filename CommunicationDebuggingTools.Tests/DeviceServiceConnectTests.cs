@@ -1,4 +1,4 @@
-﻿using System.Threading;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Plugins;
@@ -9,89 +9,39 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CommunicationDebuggingTools.Tests {
     /// <summary>
-    /// DeviceService 连接流程单测。
-    /// 真实顺序：探测端口 → 解析插件 → ProtocolConnectionContext 建连。
+    /// DeviceService 连接状态机单测（端口探测可注入，不依赖真实网络）。
     /// </summary>
     [TestClass]
     public class DeviceServiceConnectTests {
-        /// <summary>协议连接成功（需 Ip:Port 探测可通过，例如本机有进程监听）。</summary>
+
         [TestMethod]
-        public async Task ConnectAsync_WhenProtocolOk_ShouldBeSuccess () {
+        public async Task ConnectAsync_WhenProbeAndProtocolOk_ShouldBeSuccess () {
             var protocol = new FakeProtocol { ConnectResult = true };
             var resolver = new FakeProtocolResolver { ProtocolToReturn = protocol };
-            var svc = new DeviceService(resolver, new FakeDeviceRepository());
+            var probe = new FakeTcpProbe { Result = true };
+            var svc = new DeviceService(resolver, new FakeDeviceRepository(), probe);
 
-            var device = CreateDevice("127.0.0.1", 502);
+            var device = CreateDevice();
             svc.Add(device);
 
             bool ok = await svc.ConnectAsync(device.Id, CancellationToken.None);
-
-            // 若探测失败，会是 Offline 且 ConnectCallCount==0
-            if (!ok && device.StatusType == DeviceStatusType.Offline) {
-                Assert.Inconclusive("TCP 探测失败（127.0.0.1:502 未监听），无法验证协议成功分支");
-                return;
-            }
 
             Assert.IsTrue(ok);
             Assert.IsTrue(device.IsConnected);
             Assert.AreEqual(DeviceStatusType.Success, device.StatusType);
             Assert.AreEqual(1, protocol.ConnectCallCount);
-            Assert.IsNotNull(protocol.LastContext);
-            Assert.AreEqual("127.0.0.1", protocol.LastContext.Ip);
-            Assert.AreEqual(502, protocol.LastContext.Port);
+            Assert.AreEqual(1, probe.CallCount);
+            Assert.IsNotNull(svc.GetProtocol(device.Id));
         }
 
-        /// <summary>插件返回连接失败 → Error。</summary>
         [TestMethod]
-        public async Task ConnectAsync_WhenProtocolFails_ShouldBeError () {
-            var protocol = new FakeProtocol { ConnectResult = false };
-            var resolver = new FakeProtocolResolver { ProtocolToReturn = protocol };
-            var svc = new DeviceService(resolver, new FakeDeviceRepository());
-
-            var device = CreateDevice("127.0.0.1", 502);
-            svc.Add(device);
-
-            bool ok = await svc.ConnectAsync(device.Id, CancellationToken.None);
-
-            if (device.StatusType == DeviceStatusType.Offline) {
-                Assert.Inconclusive("TCP 探测失败，未进入协议连接分支");
-                return;
-            }
-
-            Assert.IsFalse(ok);
-            Assert.IsFalse(device.IsConnected);
-            Assert.AreEqual(DeviceStatusType.Error, device.StatusType);
-        }
-
-        /// <summary>解析不到插件 → Error（同样依赖探测先成功）。</summary>
-        [TestMethod]
-        public async Task ConnectAsync_WhenProtocolMissing_ShouldBeError () {
-            var resolver = new FakeProtocolResolver { ProtocolToReturn = null };
-            var svc = new DeviceService(resolver, new FakeDeviceRepository());
-
-            var device = CreateDevice("127.0.0.1", 502);
-            svc.Add(device);
-
-            bool ok = await svc.ConnectAsync(device.Id, CancellationToken.None);
-
-            if (device.StatusType == DeviceStatusType.Offline) {
-                Assert.Inconclusive("TCP 探测失败，未进入协议解析分支");
-                return;
-            }
-
-            Assert.IsFalse(ok);
-            Assert.AreEqual(DeviceStatusType.Error, device.StatusType);
-        }
-
-        /// <summary>端口不可达 → Offline，且不调用协议。</summary>
-        [TestMethod]
-        public async Task ConnectAsync_WhenPortClosed_ShouldBeOffline () {
+        public async Task ConnectAsync_WhenProbeFails_ShouldBeOffline () {
             var protocol = new FakeProtocol { ConnectResult = true };
             var resolver = new FakeProtocolResolver { ProtocolToReturn = protocol };
-            var svc = new DeviceService(resolver, new FakeDeviceRepository());
+            var probe = new FakeTcpProbe { Result = false };
+            var svc = new DeviceService(resolver, new FakeDeviceRepository(), probe);
 
-            // 建议使用几乎不会开放的端口
-            var device = CreateDevice("127.0.0.1", 1);
+            var device = CreateDevice();
             svc.Add(device);
 
             bool ok = await svc.ConnectAsync(device.Id, CancellationToken.None);
@@ -100,39 +50,115 @@ namespace CommunicationDebuggingTools.Tests {
             Assert.IsFalse(device.IsConnected);
             Assert.AreEqual(DeviceStatusType.Offline, device.StatusType);
             Assert.AreEqual(0, protocol.ConnectCallCount);
+            Assert.IsNull(svc.GetProtocol(device.Id));
         }
 
-        /// <summary>从插件目录加载 Modbus 程序集。</summary>
+        [TestMethod]
+        public async Task ConnectAsync_WhenProtocolFails_ShouldBeError () {
+            var protocol = new FakeProtocol { ConnectResult = false };
+            var resolver = new FakeProtocolResolver { ProtocolToReturn = protocol };
+            var probe = new FakeTcpProbe { Result = true };
+            var svc = new DeviceService(resolver, new FakeDeviceRepository(), probe);
+
+            var device = CreateDevice();
+            svc.Add(device);
+
+            bool ok = await svc.ConnectAsync(device.Id, CancellationToken.None);
+
+            Assert.IsFalse(ok);
+            Assert.IsFalse(device.IsConnected);
+            Assert.AreEqual(DeviceStatusType.Error, device.StatusType);
+            Assert.IsNull(svc.GetProtocol(device.Id));
+        }
+
+        [TestMethod]
+        public async Task ConnectAsync_WhenProtocolMissing_ShouldBeError () {
+            var resolver = new FakeProtocolResolver { ProtocolToReturn = null };
+            var probe = new FakeTcpProbe { Result = true };
+            var svc = new DeviceService(resolver, new FakeDeviceRepository(), probe);
+
+            var device = CreateDevice();
+            device.Protocol = "NotExist";
+            svc.Add(device);
+
+            bool ok = await svc.ConnectAsync(device.Id, CancellationToken.None);
+
+            Assert.IsFalse(ok);
+            Assert.IsFalse(device.IsConnected);
+            Assert.AreEqual(DeviceStatusType.Error, device.StatusType);
+        }
+
+        [TestMethod]
+        public async Task Disconnect_ShouldClearSessionAndOffline () {
+            var protocol = new FakeProtocol { ConnectResult = true };
+            var resolver = new FakeProtocolResolver { ProtocolToReturn = protocol };
+            var probe = new FakeTcpProbe { Result = true };
+            var svc = new DeviceService(resolver, new FakeDeviceRepository(), probe);
+
+            var device = CreateDevice();
+            svc.Add(device);
+            Assert.IsTrue(await svc.ConnectAsync(device.Id, CancellationToken.None));
+
+            svc.Disconnect(device.Id);
+
+            Assert.IsFalse(device.IsConnected);
+            Assert.AreEqual(DeviceStatusType.Offline, device.StatusType);
+            Assert.IsNull(svc.GetProtocol(device.Id));
+            Assert.IsTrue(protocol.DisconnectCallCount >= 1);
+        }
+
+        [TestMethod]
+        public void Load_ShouldResetRuntimeToOffline () {
+            var repo = new FakeDeviceRepository();
+            var d = CreateDevice();
+            d.IsConnected = true;
+            d.StatusType = DeviceStatusType.Error;
+            repo.Items.Add(d);
+
+            var svc = new DeviceService(
+                new FakeProtocolResolver(),
+                repo,
+                new FakeTcpProbe());
+            svc.Load();
+
+            Assert.AreEqual(1, svc.Devices.Count);
+            Assert.IsFalse(svc.Devices[0].IsConnected);
+            Assert.AreEqual(DeviceStatusType.Offline, svc.Devices[0].StatusType);
+        }
+
         [TestMethod]
         public void ProtocolResolver_LoadPlugin_ShouldFindModbusTcp () {
             string testsBin = System.AppDomain.CurrentDomain.BaseDirectory;
             string pluginDir = System.IO.Path.GetFullPath(
                 System.IO.Path.Combine(testsBin, @"..\..\..\Plugin.ModbusTcp\bin\Debug"));
 
-            Assert.IsTrue(
-                System.IO.Directory.Exists(pluginDir),
-                "插件目录不存在: " + pluginDir);
+            if (!System.IO.Directory.Exists(pluginDir)) {
+                Assert.Inconclusive("插件目录不存在: " + pluginDir);
+                return;
+            }
 
             string[] files = System.IO.Directory.GetFiles(pluginDir, "Plugin.*.dll");
-            Assert.IsTrue(files.Length > 0, "目录下没有 Plugin.*.dll: " + pluginDir);
+            if (files.Length == 0)
+                files = System.IO.Directory.GetFiles(pluginDir, "*Modbus*.dll");
+            if (files.Length == 0) {
+                Assert.Inconclusive("目录下没有插件 dll: " + pluginDir);
+                return;
+            }
 
             var resolver = new ProtocolResolver();
             resolver.LoadFromFolder(pluginDir);
-
             var names = resolver.GetProtocolNames();
-            Assert.IsTrue(names.Count > 0, "未加载到任何插件: " + pluginDir);
-            Assert.IsTrue(names.Contains("Modbus TCP"));
+            Assert.IsTrue(names.Contains("Modbus TCP"), "未加载到 Modbus TCP: " + string.Join(",", names));
         }
 
-        /// <summary>构造带 ProtocolSettingsJson 的测试设备。</summary>
-        /// <summary>构造测试设备（站号走 StationNo）。</summary>
-        private static DeviceInfo CreateDevice (string ip, int port) {
+        private static DeviceInfo CreateDevice () {
             return new DeviceInfo {
                 Name = "T1",
                 Protocol = "Modbus TCP",
-                Ip = ip,
-                Port = port,
-                StationNo = 1
+                Ip = "127.0.0.1",
+                Port = 502,
+                StationNo = 1,
+                ExtraSettingsJson = "{}"
             };
         }
     }

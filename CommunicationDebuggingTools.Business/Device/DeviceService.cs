@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using CommunicationDebuggingTools.Core;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -13,6 +13,7 @@ namespace CommunicationDebuggingTools.Business.Device {
     public partial class DeviceService : IDeviceService {
         private readonly IProtocolResolver _resolver;
         private readonly IDeviceRepository _repository;
+        private readonly ITcpProbe _tcpProbe;
         private readonly IAppLogger _log;
 
         private readonly ConcurrentDictionary<string, IProtocol> _sessions =
@@ -33,12 +34,14 @@ namespace CommunicationDebuggingTools.Business.Device {
         public DeviceService (
             IProtocolResolver resolver,
             IDeviceRepository repository,
+            ITcpProbe tcpProbe = null,
             IAppLogger logger = null) {
             if (resolver == null) throw new ArgumentNullException("resolver");
             if (repository == null) throw new ArgumentNullException("repository");
 
             _resolver = resolver;
             _repository = repository;
+            _tcpProbe = tcpProbe ?? new TcpProbe();
             _log = logger;
             Devices = new ObservableCollection<DeviceInfo>();
             _uiContext = SynchronizationContext.Current;

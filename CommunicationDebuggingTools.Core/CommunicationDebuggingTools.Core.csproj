@@ -56,6 +56,7 @@
     <Compile Include="Interfaces\IDeviceService.cs" />
     <Compile Include="Interfaces\IPollingEngine.cs" />
     <Compile Include="Interfaces\IProtocol.cs" />
+    <Compile Include="Interfaces\ITcpProbe.cs" />
     <Compile Include="Enums\LaneType.cs" />
     <Compile Include="Interfaces\IProtocolResolver.cs" />
     <Compile Include="Interfaces\IVariableRepository.cs" />

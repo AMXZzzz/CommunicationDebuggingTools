@@ -1,38 +1,30 @@
-﻿using System;
+using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Web.Script.Serialization;
-
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 
 namespace CommunicationDebuggingTools.Business.Persistence {
     /// <summary>
-    /// 基于本地 JSON 文件的设备列表持久化实现（<see cref="IDeviceRepository"/>）。
-    /// 使用 .NET Framework 自带的 <see cref="JavaScriptSerializer"/>，避免额外引入第三方 JSON 库依赖。
-    /// 写入采用"先写临时文件、再原子替换"的方式，降低程序异常退出/断电导致配置文件损坏的风险。
+    /// 本地 JSON 设备仓储。
+    /// 文件格式 version=1：{ "version":1, "devices":[ ... ] }。
+    /// 兼容旧版根数组；加载时忽略未知字段；运行时状态不落盘（由 DeviceService 复位）。
     /// </summary>
     public class JsonDeviceRepository : IDeviceRepository {
-        /// <summary>JSON 配置文件的完整路径。</summary>
-        private readonly string _filePath;
+        public const int CurrentVersion = 1;
 
-        /// <summary>
-        /// 创建仓储实例。
-        /// </summary>
-        /// <param name="filePath">JSON 文件的完整路径，目录不存在时会在保存时自动创建。</param>
-        /// <exception cref="ArgumentException">路径为空或空白时抛出。</exception>
+        private readonly string _filePath;
+        private readonly JavaScriptSerializer _serializer = new JavaScriptSerializer();
+
         public JsonDeviceRepository (string filePath) {
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("路径不能为空", "filePath");
-
             _filePath = filePath;
         }
 
-        /// <summary>
-        /// 加载全部设备配置。
-        /// 文件不存在、内容为空或解析失败时，均返回空列表而不是抛出异常，
-        /// 避免因为配置文件损坏导致整个程序无法启动。
-        /// </summary>
         public IList<DeviceInfo> LoadAll () {
             if (!File.Exists(_filePath))
                 return new List<DeviceInfo>();
@@ -40,27 +32,22 @@ namespace CommunicationDebuggingTools.Business.Persistence {
             string json;
             try {
                 json = File.ReadAllText(_filePath);
-            } catch (IOException) {
-                // 文件被占用/读取失败时，视为无数据，避免影响程序启动
+            } catch (Exception ex) {
+                Trace.TraceWarning("读取设备配置失败: {0}", ex.Message);
                 return new List<DeviceInfo>();
             }
 
-            if (string.IsNullOrWhiteSpace(json))    
+            if (string.IsNullOrWhiteSpace(json))
                 return new List<DeviceInfo>();
 
             try {
-                return Deserialize(json);
-            } catch {
-                // JSON 内容损坏/格式不兼容时，同样返回空列表兜底
+                return ParseDocument(json);
+            } catch (Exception ex) {
+                Trace.TraceWarning("解析设备配置失败: {0}", ex.Message);
                 return new List<DeviceInfo>();
             }
         }
 
-        /// <summary>
-        /// 将设备列表整体保存到 JSON 文件（全量覆盖）。
-        /// 先写入同目录下的临时文件，成功后再替换正式文件，避免写入过程中崩溃导致原文件被截断损坏。
-        /// </summary>
-        /// <param name="devices">待保存的设备列表；为 null 时按空列表处理。</param>
         public void SaveAll (IList<DeviceInfo> devices) {
             if (devices == null)
                 devices = new List<DeviceInfo>();
@@ -69,29 +56,135 @@ namespace CommunicationDebuggingTools.Business.Persistence {
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            string json = Serialize(devices);
+            var doc = new DeviceFileDocument {
+                version = CurrentVersion,
+                devices = new List<DeviceInfo>(devices)
+            };
+            string json = _serializer.Serialize(doc);
 
             string tempPath = _filePath + ".tmp";
-            File.WriteAllText(tempPath, json);
-
-            if (File.Exists(_filePath))
-                File.Delete(_filePath);
-            File.Move(tempPath, _filePath);
+            try {
+                File.WriteAllText(tempPath, json);
+                if (File.Exists(_filePath))
+                    File.Delete(_filePath);
+                File.Move(tempPath, _filePath);
+            } catch (Exception ex) {
+                Trace.TraceError("保存设备配置失败: {0}", ex.Message);
+                try {
+                    if (File.Exists(tempPath))
+                        File.Delete(tempPath);
+                } catch { }
+            }
         }
 
-        // ---------- 序列化（方案 A：.NET Framework 自带）----------
+        /// <summary>
+        /// 支持：根数组（旧）或 { version, devices }（新）。
+        /// </summary>
+        private IList<DeviceInfo> ParseDocument (string json) {
+            object root = _serializer.DeserializeObject(json);
+            if (root == null)
+                return new List<DeviceInfo>();
 
-        /// <summary>将设备列表序列化为 JSON 字符串。</summary>
-        private static string Serialize (IList<DeviceInfo> devices) {
-            var ser = new JavaScriptSerializer();
-            return ser.Serialize(devices);
+            // 旧格式：数组
+            if (root is object[] arr) {
+                return MapArray(arr);
+            }
+
+            // 新格式：字典
+            if (root is Dictionary<string, object> map) {
+                object devicesObj;
+                if (!map.TryGetValue("devices", out devicesObj) || devicesObj == null)
+                    return new List<DeviceInfo>();
+                if (devicesObj is object[] devicesArr)
+                    return MapArray(devicesArr);
+                // 有时反序列化为 ArrayList
+                if (devicesObj is ArrayList list) {
+                    var tmp = new object[list.Count];
+                    list.CopyTo(tmp);
+                    return MapArray(tmp);
+                }
+            }
+
+            return new List<DeviceInfo>();
         }
 
-        /// <summary>将 JSON 字符串反序列化为设备列表；解析结果为 null 时返回空列表。</summary>
-        private static IList<DeviceInfo> Deserialize (string json) {
-            var ser = new JavaScriptSerializer();
-            List<DeviceInfo> list = ser.Deserialize<List<DeviceInfo>>(json);
-            return list ?? new List<DeviceInfo>();
+        private IList<DeviceInfo> MapArray (object[] arr) {
+            var result = new List<DeviceInfo>();
+            if (arr == null) return result;
+            foreach (object item in arr) {
+                DeviceInfo d = MapDevice(item as Dictionary<string, object>);
+                if (d != null)
+                    result.Add(d);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 手工映射，忽略 ProtocolSettingsJson / UnitId 等历史字段。
+        /// </summary>
+        private static DeviceInfo MapDevice (Dictionary<string, object> m) {
+            if (m == null) return null;
+
+            var d = new DeviceInfo();
+            d.Id = GetString(m, "Id") ?? Guid.NewGuid().ToString("N");
+            d.Name = GetString(m, "Name") ?? "新设备";
+            d.Model = GetString(m, "Model") ?? "";
+            d.Protocol = GetString(m, "Protocol") ?? "";
+            d.Ip = GetString(m, "Ip") ?? "";
+            d.Port = GetInt(m, "Port", 502);
+            d.StationNo = GetInt(m, "StationNo", GetInt(m, "UnitId", 1));
+            d.ExtraSettingsJson = GetString(m, "ExtraSettingsJson");
+            if (string.IsNullOrWhiteSpace(d.ExtraSettingsJson))
+                d.ExtraSettingsJson = "{}";
+
+            // 不恢复 IsConnected / StatusType —— 由业务层 ResetRuntimeState
+            d.IsConnected = false;
+            d.StatusType = CommunicationDebuggingTools.Core.Enums.DeviceStatusType.Offline;
+
+            int lane;
+            if (TryGetInt(m, "Lane", out lane))
+                d.Lane = (CommunicationDebuggingTools.Core.Enums.LaneType)lane;
+
+            int bo;
+            if (TryGetInt(m, "ByteOrder", out bo))
+                d.ByteOrder = (CommunicationDebuggingTools.Core.Enums.ByteOrder)bo;
+            int wo;
+            if (TryGetInt(m, "WordOrder", out wo))
+                d.WordOrder = (CommunicationDebuggingTools.Core.Enums.WordOrder)wo;
+            int se;
+            if (TryGetInt(m, "StringEncoding", out se))
+                d.StringEncoding = (CommunicationDebuggingTools.Core.Enums.StringEncodingKind)se;
+
+            return d;
+        }
+
+        private static string GetString (Dictionary<string, object> m, string key) {
+            object v;
+            if (!m.TryGetValue(key, out v) || v == null) return null;
+            return Convert.ToString(v);
+        }
+
+        private static int GetInt (Dictionary<string, object> m, string key, int defaultValue) {
+            int v;
+            return TryGetInt(m, key, out v) ? v : defaultValue;
+        }
+
+        private static bool TryGetInt (Dictionary<string, object> m, string key, out int value) {
+            value = 0;
+            object v;
+            if (!m.TryGetValue(key, out v) || v == null) return false;
+            try {
+                value = Convert.ToInt32(v);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        /// <summary>落盘文档结构（version + devices）。</summary>
+        public class DeviceFileDocument {
+            public int version { get; set; }
+            public List<DeviceInfo> devices { get; set; }
         }
     }
 }
