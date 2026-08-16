@@ -13,24 +13,27 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace CommunicationDebuggingTools.EngineHost {
 
     /// <summary>
     /// 引擎进程入口：加载 Business + 插件，对外仅暴露 gRPC（默认 http://127.0.0.1:5100）。
-    /// WPF 暂仍可进程内调用 Business；多端客户端只连本 Host。
+    /// 端口只在 ConfigureKestrel 中绑定一次，避免与 appsettings 重复绑定导致 “address already in use”。
     /// </summary>
     public static class Program {
+
+        public const int DefaultPort = 5100;
 
         public static void Main (string[] args) {
             string baseDir = AppContext.BaseDirectory;
 
             var builder = WebApplication.CreateBuilder(args);
 
-            // 强制 HTTP/2 明文（本机开发）；生产可再加 HTTPS
+            // 仅此一处监听；不要在 appsettings.json 再配 Kestrel:Endpoints
             builder.WebHost.ConfigureKestrel(options => {
-                options.ListenLocalhost(5100, o => o.Protocols = HttpProtocols.Http2);
+                options.ListenLocalhost(DefaultPort, o => {
+                    o.Protocols = HttpProtocols.Http2;
+                });
             });
 
             builder.Services.AddGrpc();
@@ -38,7 +41,6 @@ namespace CommunicationDebuggingTools.EngineHost {
 
             var app = builder.Build();
 
-            // 启动时加载配置与轮询
             var log = app.Services.GetRequiredService<IAppLogger>();
             try {
                 app.Services.GetRequiredService<IDeviceService>().Load();
@@ -51,13 +53,12 @@ namespace CommunicationDebuggingTools.EngineHost {
 
             app.MapGrpcService<EngineGrpcService>();
             app.MapGet("/", () =>
-                "CommunicationDebuggingTools EngineHost — gRPC at http://127.0.0.1:5100");
+                "CommunicationDebuggingTools EngineHost — gRPC at http://127.0.0.1:" + DefaultPort);
 
-            log.Info("EngineHost", "gRPC 监听 http://127.0.0.1:5100");
+            log.Info("EngineHost", "gRPC 监听 http://127.0.0.1:" + DefaultPort);
             app.Run();
         }
 
-        /// <summary>与 WPF App 对齐的业务注册（不含 UI）。</summary>
         private static void RegisterBusiness (IServiceCollection sc, string baseDir) {
             sc.AddSingleton<IAppLogger>(_ => new MemoryAppLogger(AppConfig.LogCapacity));
 
