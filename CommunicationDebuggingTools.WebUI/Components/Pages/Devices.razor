@@ -5,9 +5,18 @@
 
 <PageTitle>设备管理</PageTitle>
 
-<h3>设备管理</h3>
+<div class="page-titlebar">
+    <div>
+        <h3>设备管理</h3>
+        <div class="page-subtitle">管理设备连接、参数与在线状态</div>
+    </div>
+    <div class="status-chip @(Gateway.IsConnected ? "ok" : "error")">
+        @(Gateway.IsConnected ? "EngineHost 在线" : "EngineHost 离线")
+    </div>
+</div>
+
 <div class="card-panel">
-    <div class="btn-row" style="margin-bottom:12px;">
+    <div class="page-actions device-toolbar">
         <button class="primary" @onclick="OpenAddDialog">新增设备</button>
         <button class="success" @onclick="ConnectAllAsync">全部连接</button>
         <button class="danger" @onclick="DisconnectAllAsync">全部断开</button>
@@ -18,55 +27,65 @@
             <button @onclick="CancelSelectMode">取消多选</button>
             <button class="danger" @onclick="ConfirmBatchDelete">删除选中（@_selectedIds.Count）</button>
         }
+        <div class="panel-meta">
+            <span class="meta-pill">总数 @Gateway.Devices.Count</span>
+            <span class="meta-pill ok">在线 @OnlineDeviceCount</span>
+        </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(_notice)) {
-        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")" style="margin-bottom:10px;">@_notice</div>
+        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")">@_notice</div>
     }
 
-    <div class="table-wrap">
-        <table>
-            <thead>
-            <tr>
-                @if (_isSelectMode) {
-                    <th style="width:42px;">选</th>
-                }
-                <th>名称</th>
-                <th>协议</th>
-                <th>地址</th>
-                <th>状态</th>
-                <th>操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            @foreach (var d in Gateway.Devices) {
-                <tr>
-                    @if (_isSelectMode) {
-                        <td>
-                            <input type="checkbox"
-                                   checked="@_selectedIds.Contains(d.Id)"
-                                   @onchange="args => ToggleSelect(d.Id, args)" />
-                        </td>
-                    }
-                    <td>@d.Name</td>
-                    <td>@d.Protocol</td>
-                    <td>@d.Ip:@d.Port</td>
-                    <td class="@(d.IsConnected ? "ok" : "error")">@(d.IsConnected ? "已连接" : "未连接")</td>
-                    <td>
-                        <div class="btn-row">
-                            <button @onclick="() => Edit(d)">编辑</button>
-                            @if (d.IsConnected) {
-                                <button @onclick="() => DisconnectAsync(d.Id)">断开</button>
-                            } else {
-                                <button class="success" @onclick="() => ConnectAsync(d.Id)">连接</button>
-                            }
-                            <button class="danger" @onclick="() => ConfirmSingleDelete(d.Id)">删除</button>
+    <div class="panel-title">设备列表</div>
+    <div class="dev-grid">
+        @foreach (var d in Gateway.Devices) {
+            <div class="plc-card @(_selectedIds.Contains(d.Id) ? "selected" : "")">
+                <div class="plc-hd">
+                    <div class="left">
+                        <div class="bar"></div>
+                        <div>
+                            <div class="name">@d.Name</div>
+                            <div class="model">@(string.IsNullOrWhiteSpace(d.Model) ? "未配置型号" : d.Model)</div>
                         </div>
-                    </td>
-                </tr>
-            }
-            </tbody>
-        </table>
+                    </div>
+                    <div class="right">
+                        @if (_isSelectMode) {
+                            <label class="card-select">
+                                <input type="checkbox"
+                                       checked="@_selectedIds.Contains(d.Id)"
+                                       @onchange="args => ToggleSelect(d.Id, args)" />
+                                选择
+                            </label>
+                        }
+                        <div class="led @(d.IsConnected ? "on" : "off")"></div>
+                    </div>
+                </div>
+                <div class="plc-body">
+                    <div class="plc-info">
+                        <div class="info-row"><span class="label">IP 地址</span><span class="value mono">@d.Ip:@d.Port</span></div>
+                        <div class="info-row"><span class="label">协议</span><span class="value">@d.Protocol</span></div>
+                        <div class="info-row"><span class="label">当前状态</span><span class="value @(d.IsConnected ? "run" : "offline")">@(d.IsConnected ? "已连接" : "未连接")</span></div>
+                    </div>
+                    <div class="plc-btns">
+                        @if (d.IsConnected) {
+                            <button class="plc-btn disconnect" @onclick="() => DisconnectAsync(d.Id)">断开</button>
+                        } else {
+                            <button class="plc-btn connect" @onclick="() => ConnectAsync(d.Id)">连接</button>
+                        }
+                        <button class="plc-btn edit" @onclick="() => Edit(d)">编辑</button>
+                        <button class="plc-btn delete" @onclick="() => ConfirmSingleDelete(d.Id)">删除</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (!_isSelectMode) {
+            <div class="plc-add-card" @onclick="OpenAddDialog">
+                <div class="plus">+</div>
+                <div class="text">添加新设备</div>
+            </div>
+        }
     </div>
 </div>
 
@@ -81,7 +100,11 @@
                 </div>
                 <div class="field">
                     <label>协议</label>
-                    <input @bind="_editor.Protocol" placeholder="例如 Modbus TCP" />
+                    <select @bind="_editor.Protocol">
+                        @foreach (var protocol in ProtocolOptions) {
+                            <option value="@protocol">@protocol</option>
+                        }
+                    </select>
                 </div>
                 <div class="field">
                     <label>型号</label>
@@ -122,6 +145,14 @@
 }
 
 @code {
+    private static readonly string[] DefaultProtocolOptions = [
+        "Modbus TCP",
+        "Siemens S7",
+        "Panasonic Mewtocol"
+    ];
+
+    private IReadOnlyList<string> ProtocolOptions => Gateway.ProtocolNames.Count > 0 ? Gateway.ProtocolNames : DefaultProtocolOptions;
+
     private DeviceEditor _editor = new();
     private string _editingId;
     private string _notice;
@@ -134,6 +165,8 @@
     private bool _deleteIsBatch;
     private string _deleteId;
     private string _deleteMessage = string.Empty;
+
+    private int OnlineDeviceCount => Gateway.Devices.Count(d => d.IsConnected);
 
     protected override async Task OnInitializedAsync () {
         Gateway.StateChanged += OnGatewayStateChanged;

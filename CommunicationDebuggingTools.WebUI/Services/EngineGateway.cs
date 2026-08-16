@@ -33,6 +33,9 @@ public sealed class EngineGateway : IDisposable {
     /// <summary>变量快照。</summary>
     public IReadOnlyList<VariableItem> Variables { get; private set; } = Array.Empty<VariableItem>();
 
+    /// <summary>Host 返回的协议名称列表。</summary>
+    public IReadOnlyList<string> ProtocolNames { get; private set; } = Array.Empty<string>();
+
     /// <summary>操作日志快照。</summary>
     public IReadOnlyList<string> Logs {
         get {
@@ -256,9 +259,16 @@ public sealed class EngineGateway : IDisposable {
                 _client.Variables.Load();
                 Devices = _client.Devices.Devices.Select(CloneDevice).ToList();
                 Variables = _client.Variables.Variables.Select(CloneVariable).ToList();
+                try {
+                    ProtocolNames = await _client.ListProtocolsAsync(cancellationToken).ConfigureAwait(false);
+                } catch (Exception ex) {
+                    ProtocolNames = Array.Empty<string>();
+                    AddLog("连接", "获取协议列表失败: " + ex.Message);
+                }
             } else {
                 Devices = Array.Empty<DeviceInfo>();
                 Variables = Array.Empty<VariableItem>();
+                ProtocolNames = Array.Empty<string>();
             }
 
             StateChanged?.Invoke();
@@ -271,11 +281,7 @@ public sealed class EngineGateway : IDisposable {
     /// 获取协议下拉选项。
     /// </summary>
     public IReadOnlyList<string> GetProtocolNames () {
-        return Devices.Select(d => d.Protocol)
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x)
-            .ToList();
+        return ProtocolNames;
     }
 
     public void Dispose () {

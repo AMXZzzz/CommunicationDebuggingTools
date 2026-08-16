@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommunicationDebuggingTools.Contracts.V1;
 using CommunicationDebuggingTools.Core.Interfaces;
 
 namespace CommunicationDebuggingTools.Client {
@@ -78,6 +81,20 @@ namespace CommunicationDebuggingTools.Client {
         public Task<bool> PingAsync (CancellationToken ct = default) {
             ThrowIfDisposed();
             return _channel.PingAsync(ct);
+        }
+
+        /// <summary>获取 Host 当前可用协议名称列表。</summary>
+        public async Task<IReadOnlyList<string>> ListProtocolsAsync (CancellationToken ct = default) {
+            ThrowIfDisposed();
+            var resp = await _channel.Client.ListProtocolsAsync(new ListProtocolsRequest(), cancellationToken: ct).ConfigureAwait(false);
+            if (resp?.ProtocolNames == null) {
+                return Array.Empty<string>();
+            }
+
+            return resp.ProtocolNames
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         public void Dispose () {

@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Persistence;
 using CommunicationDebuggingTools.Business.Plugins;
@@ -28,19 +30,25 @@ namespace CommunicationDebuggingTools.EngineHost {
     /// </summary>
     public static class Program {
 
-        public const int DefaultPort = 5100;
-        public const int WebPort = 5101;
+        public const int DefaultGrpcPort = 5100;
+        public const int DefaultWebPort = 5101;
 
         public static void Main (string[] args) {
             string baseDir = AppContext.BaseDirectory;
 
             var builder = WebApplication.CreateBuilder(args);
 
+            int configuredGrpcPort = ReadPort(builder.Configuration["EngineHost:GrpcPort"], DefaultGrpcPort);
+            int configuredWebPort = ReadPort(builder.Configuration["EngineHost:WebPort"], DefaultWebPort);
+
+            int grpcPort = FindAvailablePort(configuredGrpcPort);
+            int webPort = FindAvailablePort(configuredWebPort, grpcPort);
+
             builder.WebHost.ConfigureKestrel(options => {
-                options.ListenAnyIP(DefaultPort, o => {
+                options.ListenAnyIP(grpcPort, o => {
                     o.Protocols = HttpProtocols.Http2;
                 });
-                options.ListenAnyIP(WebPort, o => {
+                options.ListenAnyIP(webPort, o => {
                     o.Protocols = HttpProtocols.Http1;
                 });
             });
@@ -64,9 +72,9 @@ namespace CommunicationDebuggingTools.EngineHost {
 
             app.MapGet("/", () => Results.Ok(new {
                 name = "CommunicationDebuggingTools.EngineHost",
-                grpc = "http://0.0.0.0:" + DefaultPort,
-                webApi = "http://0.0.0.0:" + WebPort,
-                message = "独立 Web UI 请访问 CommunicationDebuggingTools.Web 项目"
+                grpc = "http://0.0.0.0:" + grpcPort,
+                webApi = "http://0.0.0.0:" + webPort,
+                message = "独立 Web UI 请访问 CommunicationDebuggingTools.WebUI 项目"
             }));
 
             app.MapGet("/api/status", (IDeviceService devices, IVariableService variables) => Results.Ok(new {
@@ -244,9 +252,41 @@ namespace CommunicationDebuggingTools.EngineHost {
                     })));
 
 
-            log.Info("EngineHost", "gRPC 监听 http://0.0.0.0:" + DefaultPort);
-            log.Info("EngineHost", "Web API 监听 http://0.0.0.0:" + WebPort);
+            log.Info("EngineHost", "gRPC 监听 http://0.0.0.0:" + grpcPort);
+            log.Info("EngineHost", "Web API 监听 http://0.0.0.0:" + webPort);
             app.Run();
+        }
+
+        private static int ReadPort (string raw, int fallback) {
+            if (int.TryParse(raw, out int port) && port >= 1 && port <= 65535) {
+                return port;
+            }
+            return fallback;
+        }
+
+        private static int FindAvailablePort (int preferred, params int[] excluded) {
+            var excludedSet = new HashSet<int>(excluded ?? Array.Empty<int>());
+            int candidate = preferred;
+            for (int i = 0; i < 200; i++, candidate++) {
+                if (candidate > 65535) candidate = 1024;
+                if (excludedSet.Contains(candidate)) continue;
+                if (IsPortAvailable(candidate)) return candidate;
+            }
+
+            throw new InvalidOperationException("未找到可用端口，请检查端口占用情况。");
+        }
+
+        private static bool IsPortAvailable (int port) {
+            TcpListener listener = null;
+            try {
+                listener = new TcpListener(IPAddress.Any, port);
+                listener.Start();
+                return true;
+            } catch (SocketException) {
+                return false;
+            } finally {
+                try { listener?.Stop(); } catch { }
+            }
         }
 
         private static void RegisterBusiness (IServiceCollection sc, string baseDir) {

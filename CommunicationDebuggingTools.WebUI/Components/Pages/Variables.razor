@@ -9,74 +9,132 @@
 
 <PageTitle>变量配置</PageTitle>
 
-<h3>变量配置</h3>
-<div class="card-panel">
-    <div class="btn-row" style="margin-bottom:12px;">
-        <button class="primary" @onclick="OpenAddDialog">新增变量</button>
-        <button @onclick="RefreshAsync">刷新</button>
-        <button @onclick="ExportCsvAsync">导出CSV</button>
-        <label class="button-like" for="var-import-file">导入CSV</label>
-        <InputFile id="var-import-file" class="hidden-file-input" OnChange="ImportCsvAsync" accept=".csv,text/csv" />
-        @if (!_isSelectMode) {
-            <button @onclick="EnterSelectMode">批量删除</button>
-        } else {
-            <button @onclick="CancelSelectMode">取消多选</button>
-            <button class="danger" @onclick="ConfirmBatchDelete">删除选中（@_selectedIds.Count）</button>
-        }
+<div class="page-titlebar">
+    <div>
+        <h3>变量配置</h3>
+        <div class="page-subtitle">统一管理变量读写、质量与批量导入导出</div>
+    </div>
+    <div class="status-chip @(Gateway.IsConnected ? "ok" : "error")">
+        @(Gateway.IsConnected ? "EngineHost 在线" : "EngineHost 离线")
+    </div>
+</div>
+
+<div class="var-layout">
+    <div class="device-panel">
+        <div class="panel-hd">
+            <span>设备列表</span>
+            <span class="count">@Gateway.Devices.Count</span>
+        </div>
+        <div class="device-list">
+            @foreach (var device in Gateway.Devices) {
+                <div class="dev-item @(device.Id == _selectedDeviceId ? "active" : "")" @onclick="() => SelectDevice(device.Id)">
+                    <div class="n">
+                        <span class="dot @(device.IsConnected ? "on" : "off")"></span>
+                        @device.Name
+                    </div>
+                    <div class="sub">@(string.IsNullOrWhiteSpace(device.Model) ? device.Protocol : device.Model)</div>
+                    <div class="tag-count">@GetDeviceVariableCount(device.Id) 个变量</div>
+                </div>
+            }
+        </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(_notice)) {
-        <div class="@(_noticeIsError ? "banner-error" : "banner-ok")" style="margin-bottom:10px;">@_notice</div>
-    }
+    <div class="var-panel">
+        <div class="var-hd">
+            <div class="var-hd-main">
+                <div class="dev-name">@SelectedDeviceName</div>
+                <div class="dev-meta">@SelectedDeviceMeta</div>
+            </div>
+            <div class="actions">
+                <button class="t-btn">复制到其他设备</button>
+                <button class="t-btn" @onclick="OpenBatchAddHint">批量添加</button>
+                <button class="t-btn primary" @onclick="OpenAddDialog">+ 添加变量</button>
+            </div>
+        </div>
 
-    <div class="table-wrap">
-        <table>
-            <thead>
-            <tr>
-                @if (_isSelectMode) {
-                    <th style="width:42px;">选</th>
-                }
-                <th>变量</th>
-                <th>设备</th>
-                <th>地址</th>
-                <th>值</th>
-                <th>质量</th>
-                <th>错误</th>
-                <th>写值</th>
-                <th>操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            @foreach (var v in Gateway.Variables) {
+        <div class="tabs">
+            @foreach (var tab in VariableTabs) {
+                <div class="tab @(string.Equals(_activeTab, tab.Key, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
+                     @onclick="() => SetActiveTab(tab.Key)">@tab.Label (@GetTabCount(tab.Key))</div>
+            }
+        </div>
+
+        <div class="var-body">
+            <table class="var-table">
+                <thead>
                 <tr>
                     @if (_isSelectMode) {
-                        <td>
-                            <input type="checkbox"
-                                   checked="@_selectedIds.Contains(v.Id)"
-                                   @onchange="args => ToggleSelect(v.Id, args)" />
-                        </td>
+                        <th style="width:42px;">选</th>
                     }
-                    <td>@v.Name</td>
-                    <td>@GetDeviceName(v.DeviceId)</td>
-                    <td>@v.Address</td>
-                    <td>@(v.LastValue?.ToString() ?? "")</td>
-                    <td>@v.Quality</td>
-                    <td class="error">@v.LastError</td>
-                    <td>
-                        <input class="inline-input" @bind="_writeBuffer[v.Id]" />
-                    </td>
-                    <td>
-                        <div class="btn-row">
-                            <button @onclick="() => ReadAsync(v.Id)">读</button>
-                            <button class="success" @onclick="() => WriteAsync(v.Id)">写</button>
-                            <button @onclick="() => Edit(v)">编辑</button>
-                            <button class="danger" @onclick="() => ConfirmSingleDelete(v.Id)">删除</button>
-                        </div>
-                    </td>
+                    <th>#</th>
+                    <th>显示名称</th>
+                    <th>地址</th>
+                    <th>类型</th>
+                    <th>读写</th>
+                    <th>实时值</th>
+                    <th>单位</th>
+                    <th>分类</th>
+                    <th>操作</th>
                 </tr>
-            }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                @{ var rowIndex = 0; }
+                @foreach (var v in GetVisibleVariables()) {
+                    rowIndex++;
+                    <tr>
+                        @if (_isSelectMode) {
+                            <td>
+                                <input type="checkbox"
+                                       checked="@_selectedIds.Contains(v.Id)"
+                                       @onchange="args => ToggleSelect(v.Id, args)" />
+                            </td>
+                        }
+                        <td>@rowIndex</td>
+                        <td class="name">@v.Name</td>
+                        <td class="addr">@v.Address</td>
+                        <td><span class="type @GetTypeCssClass(v.DataType)">@v.DataType</span></td>
+                        <td><span class="rw @GetAccessCssClass(v.Access)">@GetAccessText(v.Access)</span></td>
+                        <td>
+                            @if (v.Access == VariableAccess.ReadOnly) {
+                                <span class="live-val @GetLiveValueClass(v)">@GetLiveValueText(v)</span>
+                            } else {
+                                <div class="write-inline">
+                                    <input class="live-val writeable"
+                                           value="@GetWriteBufferValue(v.Id)"
+                                           @oninput="args => SetWriteBufferValue(v.Id, args.Value?.ToString())" />
+                                    <button class="write-btn" @onclick="() => WriteAsync(v.Id)">写入</button>
+                                </div>
+                            }
+                        </td>
+                        <td>@GetUnitText(v)</td>
+                        <td><span class="cat @GetCategoryCssClass(v)">@GetCategoryText(v)</span></td>
+                        <td>
+                            <div class="row-btns">
+                                <button class="row-btn" @onclick="() => Edit(v)">✎</button>
+                                <button class="row-btn del" @onclick="() => ConfirmSingleDelete(v.Id)">×</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="hint-bar @(_showHint ? "show" : string.Empty)">
+            <div class="hint-body">
+                · <b>R</b> 只读 — 仅实时显示，供监控使用<br>
+                · <b>W</b> 只写 — 可下发到设备<br>
+                · <b>R/W</b> 读写 — 既显示也可写入
+            </div>
+        </div>
+
+        <div class="var-ft">
+            <span>共 @GetVisibleVariables().Count() 个变量</span>
+            <span>只读 @GetReadOnlyCount()</span>
+            <span>可写 @GetWriteableCount()</span>
+            <span>实时刷新中</span>
+            <button class="expand-btn @(_showHint ? "open" : string.Empty)" @onclick="ToggleHint">^</button>
+        </div>
     </div>
 </div>
 
@@ -150,6 +208,14 @@
     private bool _noticeIsError;
     private readonly Dictionary<string, string> _writeBuffer = new();
 
+    private static readonly (string Key, string Label)[] VariableTabs = [
+        ("all", "全部"),
+        ("readonly", "只读"),
+        ("writeonly", "可写"),
+        ("status", "状态点"),
+        ("data", "监控数据")
+    ];
+
     private bool _isSelectMode;
     private readonly HashSet<string> _selectedIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _showEditDialog;
@@ -157,9 +223,14 @@
     private bool _deleteIsBatch;
     private string _deleteId;
     private string _deleteMessage = string.Empty;
+    private string _selectedDeviceId;
+    private string _activeTab = "all";
+    private bool _showHint = true;
 
     protected override void OnInitialized () {
         Gateway.StateChanged += OnGatewayStateChanged;
+        SyncWriteBuffer();
+        EnsureSelectedDevice();
         PickDefaultDevice();
     }
 
@@ -279,6 +350,99 @@
         _showDeleteConfirm = false;
         _deleteId = null;
         _deleteMessage = string.Empty;
+    }
+
+    private void SelectDevice (string deviceId) {
+        _selectedDeviceId = deviceId ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(_selectedDeviceId)) {
+            _editor.DeviceId = _selectedDeviceId;
+        }
+    }
+
+    private void SetActiveTab (string key) {
+        _activeTab = string.IsNullOrWhiteSpace(key) ? "all" : key;
+    }
+
+    private void ToggleHint () {
+        _showHint = !_showHint;
+    }
+
+    private void OpenBatchAddHint () {
+        SetNotice("批量添加功能待完善", false);
+    }
+
+    private IEnumerable<VariableItem> GetVisibleVariables () {
+        IEnumerable<VariableItem> variables = Gateway.Variables;
+        if (!string.IsNullOrWhiteSpace(_selectedDeviceId)) {
+            variables = variables.Where(v => string.Equals(v.DeviceId, _selectedDeviceId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return _activeTab switch {
+            "readonly" => variables.Where(v => v.Access == VariableAccess.ReadOnly),
+            "writeonly" => variables.Where(v => v.Access == VariableAccess.WriteOnly),
+            "status" => variables.Where(IsStatusVariable),
+            "data" => variables.Where(v => !IsStatusVariable(v)),
+            _ => variables
+        };
+    }
+
+    private int GetTabCount (string key) {
+        IEnumerable<VariableItem> variables = Gateway.Variables;
+        if (!string.IsNullOrWhiteSpace(_selectedDeviceId)) {
+            variables = variables.Where(v => string.Equals(v.DeviceId, _selectedDeviceId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return key switch {
+            "readonly" => variables.Count(v => v.Access == VariableAccess.ReadOnly),
+            "writeonly" => variables.Count(v => v.Access == VariableAccess.WriteOnly),
+            "status" => variables.Count(IsStatusVariable),
+            "data" => variables.Count(v => !IsStatusVariable(v)),
+            _ => variables.Count()
+        };
+    }
+
+    private int GetDeviceVariableCount (string deviceId) {
+        return Gateway.Variables.Count(v => string.Equals(v.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private int GetReadOnlyCount () {
+        return GetVisibleVariables().Count(v => v.Access == VariableAccess.ReadOnly);
+    }
+
+    private int GetWriteableCount () {
+        return GetVisibleVariables().Count(v => v.Access != VariableAccess.ReadOnly);
+    }
+
+    private string SelectedDeviceName => GetSelectedDevice()?.Name ?? "变量配置";
+
+    private string SelectedDeviceMeta {
+        get {
+            var device = GetSelectedDevice();
+            if (device == null) {
+                return "请选择左侧设备查看变量";
+            }
+
+            return $"{device.Model} · {device.Ip}:{device.Port} · {device.Protocol}";
+        }
+    }
+
+    private CommunicationDebuggingTools.Core.Models.DeviceInfo GetSelectedDevice () {
+        if (!string.IsNullOrWhiteSpace(_selectedDeviceId)) {
+            var selected = Gateway.Devices.FirstOrDefault(d => string.Equals(d.Id, _selectedDeviceId, StringComparison.OrdinalIgnoreCase));
+            if (selected != null) {
+                return selected;
+            }
+        }
+
+        return Gateway.Devices.FirstOrDefault();
+    }
+
+    private static bool IsStatusVariable (VariableItem variable) {
+        if (variable == null) {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(variable.Category) && variable.Category.Contains("状态", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task ReadAsync (string id) {
@@ -473,21 +637,112 @@
 
     private void OnGatewayStateChanged () {
         _ = InvokeAsync(() => {
-            foreach (var item in Gateway.Variables) {
-                _writeBuffer.TryAdd(item.Id, item.LastValue?.ToString() ?? string.Empty);
-            }
+            SyncWriteBuffer();
+            EnsureSelectedDevice();
             PickDefaultDevice();
             StateHasChanged();
         });
+    }
+
+    private string GetWriteBufferValue (string id) {
+        return _writeBuffer.TryGetValue(id, out var value) ? value : string.Empty;
+    }
+
+    private void SetWriteBufferValue (string id, string value) {
+        if (string.IsNullOrWhiteSpace(id)) {
+            return;
+        }
+
+        _writeBuffer[id] = value ?? string.Empty;
+    }
+
+    private void SyncWriteBuffer () {
+        foreach (var item in Gateway.Variables) {
+            if (item == null || string.IsNullOrWhiteSpace(item.Id)) {
+                continue;
+            }
+
+            if (!_writeBuffer.ContainsKey(item.Id)) {
+                _writeBuffer[item.Id] = item.LastValue?.ToString() ?? string.Empty;
+            }
+        }
     }
 
     private string GetDeviceName (string deviceId) {
         return Gateway.Devices.FirstOrDefault(d => d.Id == deviceId)?.Name ?? deviceId;
     }
 
+    private void EnsureSelectedDevice () {
+        if (!string.IsNullOrWhiteSpace(_selectedDeviceId) && Gateway.Devices.Any(d => string.Equals(d.Id, _selectedDeviceId, StringComparison.OrdinalIgnoreCase))) {
+            return;
+        }
+
+        _selectedDeviceId = Gateway.Devices.FirstOrDefault()?.Id ?? string.Empty;
+    }
+
     private void PickDefaultDevice () {
         if (!string.IsNullOrWhiteSpace(_editor.DeviceId)) return;
-        _editor.DeviceId = Gateway.Devices.FirstOrDefault()?.Id ?? string.Empty;
+        _editor.DeviceId = !string.IsNullOrWhiteSpace(_selectedDeviceId) ? _selectedDeviceId : Gateway.Devices.FirstOrDefault()?.Id ?? string.Empty;
+    }
+
+    private static string GetAccessText (VariableAccess access) {
+        return access switch {
+            VariableAccess.ReadOnly => "R",
+            VariableAccess.WriteOnly => "W",
+            _ => "R/W"
+        };
+    }
+
+    private static string GetAccessCssClass (VariableAccess access) {
+        return access switch {
+            VariableAccess.ReadOnly => "r",
+            VariableAccess.WriteOnly => "w",
+            _ => "rw"
+        };
+    }
+
+    private static string GetTypeCssClass (VariableDataType type) {
+        return type switch {
+            VariableDataType.Bool => "bool",
+            VariableDataType.Float or VariableDataType.Double => "float",
+            VariableDataType.String => "string",
+            _ => string.Empty
+        };
+    }
+
+    private static string GetCategoryText (VariableItem variable) {
+        if (!string.IsNullOrWhiteSpace(variable?.Category)) {
+            return variable.Category;
+        }
+
+        return IsStatusVariable(variable) ? "状态点" : "监控数据";
+    }
+
+    private static string GetCategoryCssClass (VariableItem variable) {
+        if (IsStatusVariable(variable)) {
+            return "status";
+        }
+
+        return string.IsNullOrWhiteSpace(variable?.Category) ? "data" : "data";
+    }
+
+    private static string GetUnitText (VariableItem variable) {
+        return string.IsNullOrWhiteSpace(variable?.Unit) ? "—" : variable.Unit;
+    }
+
+    private static string GetLiveValueText (VariableItem variable) {
+        return variable?.LastValue?.ToString() ?? string.Empty;
+    }
+
+    private static string GetLiveValueClass (VariableItem variable) {
+        if (variable?.DataType == VariableDataType.Bool) {
+            string value = variable.LastValue?.ToString() ?? string.Empty;
+            if (value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1" || value.Equals("on", StringComparison.OrdinalIgnoreCase)) {
+                return "bool-on";
+            }
+        }
+
+        return string.Empty;
     }
 
     private void SetOk (string msg) => SetNotice(msg, false);
