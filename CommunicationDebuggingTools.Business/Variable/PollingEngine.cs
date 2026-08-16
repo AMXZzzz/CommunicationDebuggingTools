@@ -1,4 +1,4 @@
-﻿using CommunicationDebuggingTools.Core;
+using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Logging;
@@ -18,8 +18,7 @@ namespace CommunicationDebuggingTools.Business.Variable {
     ///      不同设备的循环互相独立（各自一个 Task），并发采集。
     ///   2. 按 ScanRateMs 计时：每读完一个周期记录下次应读时间，
     ///      通过 100 ms 主定时节拍驱动，实际精度 ≤ 100 ms 误差。
-    ///   3. 当前 I/O 是伪异步（Session 内部同步阻塞），Task.Run 占用线程池线程。
-    ///      后续 Session 全链路改为 await ReadAsync 后，此处 Task.Run 可去掉。
+    ///   3. 变量读写走协议真异步 ReadAsync；按设备串行、跨设备并发，避免打满会话锁。
     ///   4. 属性更新通过 SynchronizationContext.Post 回 UI 线程，WPF 绑定安全。
     ///      （WPF 4.5+ 对单个属性的跨线程通知有内置 marshal，但显式 Post 更可靠）
     /// </summary>

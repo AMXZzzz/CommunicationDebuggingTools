@@ -54,6 +54,8 @@
     <Compile Include="Fakes\FakeProtocol.cs" />
     <Compile Include="Fakes\FakeTcpProbe.cs" />
     <Compile Include="JsonDeviceRepositoryTests.cs" />
+    <Compile Include="PollingEngineTests.cs" />
+    <Compile Include="JsonVariableRepositoryTests.cs" />
     <Compile Include="Fakes\FakeProtocolResolver.cs" />
     <Compile Include="Fakes\FakeVariableRepository.cs" />
     <Compile Include="PanasonicAddressParseTests.cs" />
