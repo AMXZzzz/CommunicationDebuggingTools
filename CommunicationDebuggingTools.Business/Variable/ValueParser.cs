@@ -2,7 +2,7 @@
 using System.Globalization;
 using CommunicationDebuggingTools.Core.Enums;
 
-namespace CommunicationDebuggingTools.Business.Tools {
+namespace CommunicationDebuggingTools.Business.Variable {
 
     /// <summary>界面字符串 → 写入值。</summary>
     public static class ValueParser {

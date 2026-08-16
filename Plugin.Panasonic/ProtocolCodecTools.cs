@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Text;
 using CommunicationDebuggingTools.Core.Enums;
 
-namespace CommunicationDebuggingTools.Core.Tools {
+namespace Plugin.Panasonic {
     /// <summary>
     /// MEWTOCOL 插件共用工具：字序/字节序、字符串编码、数值拆合。
     /// 不含网络与报文收发。
