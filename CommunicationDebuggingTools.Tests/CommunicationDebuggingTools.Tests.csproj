@@ -75,10 +75,6 @@
       <Project>{ba21f510-a243-40f0-a52f-4919278c9a3f}</Project>
       <Name>Plugin.ModbusTcp</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Plugin.Panasonic\Plugin.Panasonic.csproj">
-      <Project>{ef746e8d-6148-41ab-94ae-6ef601467d47}</Project>
-      <Name>Plugin.Panasonic</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Plugin.SiemensS7\Plugin.SiemensS7.csproj">
       <Project>{8a6cd834-9868-4142-bdbd-cf9e6b416f04}</Project>
       <Name>Plugin.SiemensS7</Name>
