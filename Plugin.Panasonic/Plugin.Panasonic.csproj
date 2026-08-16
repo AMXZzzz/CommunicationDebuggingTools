@@ -45,7 +45,6 @@
     <Compile Include="PanasonicSession.cs" />
     <Compile Include="PanasonicProtocol.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Tools.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CommunicationDebuggingTools.Core\CommunicationDebuggingTools.Core.csproj">

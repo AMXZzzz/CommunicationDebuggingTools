@@ -1,6 +1,5 @@
 ﻿using CommunicationDebuggingTools.Business.Device;
 using CommunicationDebuggingTools.Business.Persistence;
-using CommunicationDebuggingTools.Business.Tools;
 using CommunicationDebuggingTools.Business.Variable;
 using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
@@ -11,6 +10,7 @@ using CommunicationDebuggingTools.Views.Pages.Log;
 using CommunicationDebuggingTools.Views.Pages.Monitor;
 using CommunicationDebuggingTools.Views.Pages.Settings;
 using CommunicationDebuggingTools.Views.VariableConfigPage;
+using CommunicationDebuggingTools.Business.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;

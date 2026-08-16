@@ -12,16 +12,14 @@ using CommunicationDebuggingTools.Core.Models;
 namespace CommunicationDebuggingTools.Business.Variable {
 
     /// <summary>
-    /// 变量业务：配置持久化 + 通过设备已建立的 <see cref="IProtocol"/> 会话做读写。
-    /// <para>
-    /// 不解析 Address，不解释协议；只组装 <see cref="ProtocolDataMessage"/> 并调用插件。
-    /// </para>
+    /// 变量业务：配置持久化 + 通过设备已建立的 IProtocol 会话读写。
+    /// 不解析 Address，不解释协议；只组装 ProtocolDataMessage 并调用插件。
     /// </summary>
     public class VariableService : IVariableService {
 
-        private readonly IDeviceService _devices;
+        private readonly IDeviceService    _devices;
         private readonly IVariableRepository _repository;
-        private readonly IAppLogger _log;
+        private readonly IAppLogger         _log;
 
         public ObservableCollection<VariableItem> Variables { get; private set; }
 
@@ -31,31 +29,21 @@ namespace CommunicationDebuggingTools.Business.Variable {
             IAppLogger logger = null) {
             if (devices == null) throw new ArgumentNullException(nameof(devices));
             if (repository == null) throw new ArgumentNullException(nameof(repository));
-
             _devices = devices;
             _repository = repository;
             _log = logger;
             Variables = new ObservableCollection<VariableItem>();
         }
 
-        private void LogWarn (string msg) {
-            if (_log != null) _log.Warn("Variable", msg);
-        }
-
-        private void LogError (string msg) {
-            if (_log != null) _log.Error("Variable", msg);
-        }
-
+        // ── 持久化 ──────────────────────────────────
         public void Load () {
             Variables.Clear();
             IList<VariableItem> list = _repository.LoadAll();
-            if (list == null) return;
-            foreach (VariableItem v in list)
-                Variables.Add(v);
+            if (list != null)
+                foreach (VariableItem v in list) Variables.Add(v);
         }
 
-        public void Save () =>
-            _repository.SaveAll(Variables.ToList());
+        public void Save () => _repository.SaveAll(Variables.ToList());
 
         public void Add (VariableItem item) {
             if (item == null) throw new ArgumentNullException(nameof(item));
@@ -93,170 +81,142 @@ namespace CommunicationDebuggingTools.Business.Variable {
             Save();
         }
 
-        /// <summary>
-        /// 读一点：权限 → 取协议会话 → 组装报文 → 回填 LastValue / Quality。
-        /// </summary>
-        public async Task<bool> ReadAsync (string variableId, CancellationToken cancellationToken) {
-            VariableItem v = FindRequired(variableId);
+        // ── 读写 ────────────────────────────────────
+
+        public async Task<OperationResult> ReadAsync (
+            string variableId,
+            CancellationToken cancellationToken) {
+
+            VariableItem v;
+            try { v = FindRequired(variableId); } catch (Exception ex) { return OperationResult.VariableNotFound(variableId + " " + ex.Message); }
 
             if (v.Access == VariableAccess.WriteOnly) {
-                v.LastError = "只写变量不可读";
-                v.Quality = DataQuality.Bad;
-                LogWarn("只写不可读: " + v.Name);
-                return false;
+                var r = OperationResult.AccessDenied("只写变量不可读");
+                SetBad(v, r.ErrorMessage); return r;
             }
 
-            IProtocol protocol;
-            DeviceInfo device;
-            string err;
+            IProtocol protocol; DeviceInfo device; string err;
             if (!TryGetProtocol(v.DeviceId, out protocol, out device, out err)) {
-                v.LastError = err;
-                v.Quality = DataQuality.Bad;
+                var code = err.Contains("不存在") ? OperationErrorCode.DeviceNotFound
+                                                  : OperationErrorCode.DeviceNotConnected;
+                var r = OperationResult.Fail(err, code);
+                SetBad(v, r.ErrorMessage);
                 LogWarn(err + " — " + v.Name);
-                return false;
+                return r;
             }
 
             ProtocolDataMessage msg = BuildMessage(v, device, null);
             ProtocolDataMessage result;
             try {
                 result = await protocol.ReadAsync(msg, cancellationToken);
+            } catch (OperationCanceledException) {
+                SetBad(v, "已取消");
+                return OperationResult.Cancelled;
             } catch (Exception ex) {
-                v.LastError = ex.Message;
-                v.Quality = DataQuality.Bad;
-                LogError("读异常: " + v.Name + " @ " + v.Address + " — " + ex.Message);
+                SetBad(v, ex.Message);
+                LogError("读异常: " + v.Name + " — " + ex.Message);
                 CheckAndMarkDisconnected(v.DeviceId);
-                return false;
+                return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError);
             }
 
-            v.LastError = result.ErrorMessage ?? "";
+            v.LastError = result.ErrorMessage ?? string.Empty;
             v.Quality = result.Quality;
+
             if (result.Success) {
                 v.LastValue = result.Value;
                 _devices.ReportCommSuccess(v.DeviceId);
-                return true;
+                return OperationResult.Ok;
             }
 
-            LogError("读失败: " + v.Name + " @ " + v.Address
-                + " — " + (result.ErrorMessage ?? ""));
-            CheckAndMarkDisconnected(v.DeviceId);
+            LogError("读失败: " + v.Name + " — " + result.ErrorMessage);
             _devices.ReportCommError(v.DeviceId);
-            return false;
+            CheckAndMarkDisconnected(v.DeviceId);
+            return OperationResult.ProtocolError(
+                string.IsNullOrWhiteSpace(result.ErrorMessage) ? "协议返回失败" : result.ErrorMessage);
         }
 
-        /// <summary>
-        /// 写一点：权限 → 协议 → 成功则更新 LastValue。
-        /// </summary>
-        public async Task<bool> WriteAsync (
+        public async Task<OperationResult> WriteAsync (
             string variableId,
             object value,
             CancellationToken cancellationToken) {
-            VariableItem v = FindRequired(variableId);
+
+            VariableItem v;
+            try { v = FindRequired(variableId); } catch (Exception ex) { return OperationResult.VariableNotFound(variableId + " " + ex.Message); }
 
             if (v.Access == VariableAccess.ReadOnly) {
-                v.LastError = "只读变量不可写";
-                v.Quality = DataQuality.Bad;
-                LogWarn("只读不可写: " + v.Name);
-                return false;
+                var r = OperationResult.AccessDenied("只读变量不可写");
+                SetBad(v, r.ErrorMessage); return r;
             }
 
-            IProtocol protocol;
-            DeviceInfo device;
-            string err;
+            IProtocol protocol; DeviceInfo device; string err;
             if (!TryGetProtocol(v.DeviceId, out protocol, out device, out err)) {
-                v.LastError = err;
-                v.Quality = DataQuality.Bad;
+                var code = err.Contains("不存在") ? OperationErrorCode.DeviceNotFound
+                                                  : OperationErrorCode.DeviceNotConnected;
+                var r = OperationResult.Fail(err, code);
+                SetBad(v, r.ErrorMessage);
                 LogWarn(err + " — " + v.Name);
-                return false;
+                return r;
             }
 
             ProtocolDataMessage msg = BuildMessage(v, device, value);
             ProtocolDataMessage result;
             try {
                 result = await protocol.WriteAsync(msg, cancellationToken);
+            } catch (OperationCanceledException) {
+                SetBad(v, "已取消");
+                return OperationResult.Cancelled;
             } catch (Exception ex) {
-                v.LastError = ex.Message;
-                v.Quality = DataQuality.Bad;
-                LogError("写异常: " + v.Name + " @ " + v.Address + " — " + ex.Message);
+                SetBad(v, ex.Message);
+                LogError("写异常: " + v.Name + " — " + ex.Message);
                 CheckAndMarkDisconnected(v.DeviceId);
-                return false;
+                return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError);
             }
 
-            v.LastError = result.ErrorMessage ?? "";
+            v.LastError = result.ErrorMessage ?? string.Empty;
             if (result.Success) {
                 v.LastValue = value;
                 v.Quality = DataQuality.Good;
                 _devices.ReportCommSuccess(v.DeviceId);
-                return true;
+                return OperationResult.Ok;
             }
 
-            LogError("写失败: " + v.Name + " @ " + v.Address
-                + " — " + (result.ErrorMessage ?? ""));
-            CheckAndMarkDisconnected(v.DeviceId);
             v.Quality = DataQuality.Bad;
+            LogError("写失败: " + v.Name + " — " + result.ErrorMessage);
             _devices.ReportCommError(v.DeviceId);
-            return false;
+            CheckAndMarkDisconnected(v.DeviceId);
+            return OperationResult.ProtocolError(
+                string.IsNullOrWhiteSpace(result.ErrorMessage) ? "协议返回失败" : result.ErrorMessage);
         }
 
-        /// <summary>按设备批量读（跳过只写点）。</summary>
         public async Task ReadByDeviceAsync (string deviceId, CancellationToken cancellationToken) {
-            if (string.IsNullOrEmpty(deviceId))
-                return;
-
-            foreach (VariableItem v in Variables.Where(x => x != null && x.DeviceId == deviceId).ToList()) {
-                if (v.Access == VariableAccess.WriteOnly)
-                    continue;
+            if (string.IsNullOrEmpty(deviceId)) return;
+            foreach (VariableItem v in Variables
+                .Where(x => x != null && x.DeviceId == deviceId).ToList()) {
+                if (v.Access == VariableAccess.WriteOnly) continue;
                 await ReadAsync(v.Id, cancellationToken);
             }
         }
 
-        // -------------------- 私有 --------------------
+        // ── 私有 ────────────────────────────────────
 
-        /// <summary>
-        /// 取已连接设备的协议会话。不再使用 IProtocolDataAccess。
-        /// </summary>
         private bool TryGetProtocol (
             string deviceId,
             out IProtocol protocol,
             out DeviceInfo device,
             out string error) {
-            protocol = null;
-            device = null;
-            error = "";
-
+            protocol = null; device = null; error = string.Empty;
             device = _devices.Devices.FirstOrDefault(d => d != null && d.Id == deviceId);
-            if (device == null) {
-                error = "设备不存在";
-                return false;
-            }
-
-            if (!device.IsConnected) {
-                error = "设备未连接";
-                return false;
-            }
-
+            if (device == null) { error = "设备不存在"; return false; }
+            if (!device.IsConnected) { error = "设备未连接"; return false; }
             protocol = _devices.GetProtocol(deviceId);
-            if (protocol == null) {
-                error = "无协议会话";
-                return false;
-            }
-
-            if (!protocol.IsConnected) {
-                error = "协议会话已断开";
-                return false;
-            }
-
+            if (protocol == null) { error = "无协议会话"; return false; }
+            if (!protocol.IsConnected) { error = "协议会话已断开"; return false; }
             return true;
         }
 
-        /// <summary>
-        /// 组装读写报文：Address 原样传入，序与编码来自设备默认。
-        /// </summary>
-        private static ProtocolDataMessage BuildMessage (
-            VariableItem v,
-            DeviceInfo device,
-            object writeValue) {
-            return new ProtocolDataMessage {
-                Address = v.Address ?? "",
+        private static ProtocolDataMessage BuildMessage (VariableItem v, DeviceInfo device, object writeValue) =>
+            new ProtocolDataMessage {
+                Address = v.Address ?? string.Empty,
                 DataType = v.DataType,
                 Length = v.Length,
                 ByteOrder = device.ByteOrder,
@@ -264,6 +224,17 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 StringEncoding = device.StringEncoding,
                 Value = writeValue
             };
+
+        private static void SetBad (VariableItem v, string msg) {
+            v.LastError = msg;
+            v.Quality = DataQuality.Bad;
+        }
+
+        private void CheckAndMarkDisconnected (string deviceId) {
+            try {
+                IProtocol p = _devices.GetProtocol(deviceId);
+                if (p != null && !p.IsConnected) _devices.Disconnect(deviceId);
+            } catch { }
         }
 
         private void ValidateForUpsert (VariableItem item, string currentId) {
@@ -273,48 +244,36 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 throw new ArgumentException("变量名称不能为空", nameof(item));
             if (string.IsNullOrWhiteSpace(item.Address))
                 throw new ArgumentException("变量地址不能为空", nameof(item));
-
             bool hasDevice = _devices.Devices.Any(d => d != null && d.Id == item.DeviceId);
             if (!hasDevice)
                 throw new InvalidOperationException("设备不存在: " + item.DeviceId);
-
-            bool duplicated = Variables.Any(v =>
+            bool dup = Variables.Any(v =>
                 v != null &&
                 !string.Equals(v.Id, currentId, StringComparison.Ordinal) &&
                 string.Equals(v.DeviceId, item.DeviceId, StringComparison.Ordinal) &&
                 string.Equals(v.Address, item.Address, StringComparison.OrdinalIgnoreCase));
-            if (duplicated)
+            if (dup)
                 throw new InvalidOperationException("同设备下变量地址重复: " + item.Address);
         }
 
         private static void Normalize (VariableItem item) {
-            item.Id = string.IsNullOrWhiteSpace(item.Id) ? item.Id : item.Id.Trim();
+            item.Id = (item.Id ?? string.Empty).Trim();
             item.DeviceId = (item.DeviceId ?? string.Empty).Trim();
             item.Name = (item.Name ?? string.Empty).Trim();
             item.Address = (item.Address ?? string.Empty).Trim();
             item.Unit = (item.Unit ?? string.Empty).Trim();
-            item.Category = string.IsNullOrWhiteSpace(item.Category)
-                ? "状态点"
-                : item.Category.Trim();
+            item.Category = string.IsNullOrWhiteSpace(item.Category) ? "状态点" : item.Category.Trim();
             item.Description = (item.Description ?? string.Empty).Trim();
         }
 
         private VariableItem FindRequired (string id) {
-            if (string.IsNullOrWhiteSpace(id))
-                throw new ArgumentException("Id 不能为空", nameof(id));
+            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Id 不能为空", nameof(id));
             VariableItem v = Variables.FirstOrDefault(x => x != null && x.Id == id);
-            if (v == null)
-                throw new InvalidOperationException("变量不存在: " + id);
+            if (v == null) throw new InvalidOperationException("变量不存在: " + id);
             return v;
         }
 
-        /// <summary>读写失败后若协议已断，通知 DeviceService 标离线。</summary>
-        private void CheckAndMarkDisconnected (string deviceId) {
-            try {
-                IProtocol protocol = _devices.GetProtocol(deviceId);
-                if (protocol != null && !protocol.IsConnected)
-                    _devices.Disconnect(deviceId);
-            } catch { }
-        }
+        private void LogWarn (string msg) => _log?.Warn("Variable", msg);
+        private void LogError (string msg) => _log?.Error("Variable", msg);
     }
 }

@@ -2,7 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CommunicationDebuggingTools.Business.Tools {
+namespace CommunicationDebuggingTools.Business.Device {
     /// <summary>
     /// TCP 端口连通性探测（连接前预检）
     /// </summary>

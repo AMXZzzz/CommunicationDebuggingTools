@@ -5,7 +5,7 @@ using System.Reflection;
 using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
 
-namespace CommunicationDebuggingTools.Business.Tools {
+namespace CommunicationDebuggingTools.Business.Plugins {
 
     /// <summary>
     /// 协议插件解析器：扫描 Plugin.*.dll，通过反射读取 ProtocolNameAttribute 完成注册。

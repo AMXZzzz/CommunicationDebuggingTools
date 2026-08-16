@@ -118,7 +118,7 @@ namespace CommunicationDebuggingTools.Tests {
 
             Assert.IsTrue(files.Length > 0, "未找到松下插件: " + pluginDir);
 
-            var resolver = new CommunicationDebuggingTools.Business.Tools.ProtocolResolver();
+            var resolver = new CommunicationDebuggingTools.Business.Plugins.ProtocolResolver();
             resolver.LoadFromFolder(pluginDir);
 
             var names = resolver.GetProtocolNames();

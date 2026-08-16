@@ -1,5 +1,6 @@
 ﻿using CommunicationDebuggingTools.Core;
 using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
 using System;
@@ -169,15 +170,16 @@ namespace CommunicationDebuggingTools.Business.Variable {
                 if (_nextRead.TryGetValue(v.Id, out due) && now < due)
                     continue;
 
-                bool ok = false;
+                OperationResult result = null;
                 try {
-                    ok = await _variables.ReadAsync(v.Id, ct).ConfigureAwait(false);
+                    result = await _variables.ReadAsync(v.Id, ct).ConfigureAwait(false);
                 } catch (OperationCanceledException) {
                     return;
                 } catch (Exception ex) {
                     _log?.Warn("PollingEngine",
                         string.Format("读取 [{0}]{1} 异常: {2}", deviceId, v.Name, ex.Message));
                 }
+                bool ok = result != null && result.Success;
 
                 // 更新下次读取时间
                 _nextRead[v.Id] = DateTime.UtcNow.AddMilliseconds(v.ScanRateMs);

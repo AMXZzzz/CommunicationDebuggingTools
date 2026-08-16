@@ -150,7 +150,7 @@ namespace CommunicationDebuggingTools.Tests {
 
             Assert.IsTrue(files.Length > 0, "未找到 S7 插件 dll: " + pluginDir);
 
-            var resolver = new CommunicationDebuggingTools.Business.Tools.ProtocolResolver();
+            var resolver = new CommunicationDebuggingTools.Business.Plugins.ProtocolResolver();
             resolver.LoadFromFolder(pluginDir);
 
             var names = resolver.GetProtocolNames();

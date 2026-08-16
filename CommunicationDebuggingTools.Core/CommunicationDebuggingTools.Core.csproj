@@ -42,6 +42,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Enums\OperationErrorCode.cs" />
+    <Compile Include="Enums\OperationResult.cs" />
     <Compile Include="Interfaces\ProtocolNameAttribute.cs" />
     <Compile Include="AppConfig.cs" />
     <Compile Include="Enums\DataOrder.cs" />
@@ -68,6 +70,7 @@
     <Compile Include="Models\VariableItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Tools\ExtraSettingsJsonHelper.cs" />
+    <Compile Include="Tools\ProtocolCodecTools.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

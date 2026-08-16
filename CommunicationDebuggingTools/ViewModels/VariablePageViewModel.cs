@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using CommunicationDebuggingTools.Business.Tools;
+using CommunicationDebuggingTools.Business.Variable;
 using CommunicationDebuggingTools.Core.Interfaces;
+using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Core.Logging;
 using CommunicationDebuggingTools.Core.Models;
 
@@ -167,24 +168,18 @@ namespace CommunicationDebuggingTools.ViewModels {
                 return;
             }
 
-            bool ok;
+            OperationResult result;
             try {
-                ok = await _variables.WriteAsync(variableId, value, CancellationToken.None)
+                result = await _variables.WriteAsync(variableId, value, CancellationToken.None)
                     .ConfigureAwait(true);
-            } catch (ArgumentException ex) {
-                RaiseInfo("写入失败", ex.Message);
-                return;
-            } catch (InvalidOperationException ex) {
+            } catch (Exception ex) {
                 RaiseInfo("写入失败", ex.Message);
                 return;
             }
 
-            if (!ok) {
-                string error = string.IsNullOrWhiteSpace(variable.LastError)
-                    ? "写入未成功"
-                    : variable.LastError;
-                RaiseInfo("写入失败", error);
-            }
+            if (!result.Success)
+                // OperationResult 直接携带错误原因，无需再读 variable.LastError
+                RaiseInfo($"写入失败 ({result.ErrorCode})", result.ErrorMessage);
 
             RequestRefresh?.Invoke();
         }

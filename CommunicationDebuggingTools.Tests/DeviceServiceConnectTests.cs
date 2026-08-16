@@ -1,7 +1,7 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
 using CommunicationDebuggingTools.Business.Device;
-using CommunicationDebuggingTools.Business.Tools;
+using CommunicationDebuggingTools.Business.Plugins;
 using CommunicationDebuggingTools.Core.Enums;
 using CommunicationDebuggingTools.Core.Models;
 using CommunicationDebuggingTools.Tests.Fakes;

@@ -9,6 +9,7 @@ namespace CommunicationDebuggingTools.Core.Tools {
     /// MEWTOCOL 插件共用工具：字序/字节序、字符串编码、数值拆合。
     /// 不含网络与报文收发。
     /// </summary>
+    /// 
     /// <summary>
     /// 协议编解码公共工具：字序/字节序转换、字符串编码、数值拆合。
     /// 与协议无关，供所有插件共用；不含网络与报文收发逻辑。
