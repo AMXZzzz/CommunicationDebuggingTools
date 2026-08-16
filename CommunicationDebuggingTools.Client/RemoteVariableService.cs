@@ -42,8 +42,8 @@ namespace CommunicationDebuggingTools.Client {
         private async Task WatchLoopAsync (CancellationToken ct) {
             try {
                 using var call = _client.WatchVariables(new Empty(), cancellationToken: ct);
-                await foreach (VariableValueEvent evt in call.ResponseStream.ReadAllAsync(ct)
-                    .ConfigureAwait(false)) {
+                while (await call.ResponseStream.MoveNext(ct).ConfigureAwait(false)) {
+                    VariableValueEvent evt = call.ResponseStream.Current;
                     Post(() => ApplyEvent(evt));
                 }
             } catch (OperationCanceledException) { }
@@ -88,10 +88,10 @@ namespace CommunicationDebuggingTools.Client {
                     if (v != null) MergeValue(v, resp.Variable);
                 }
                 return resp?.Result?.Ok == true
-                    ? CoreOp.Ok
-                    : CoreOp.ProtocolError(resp?.Result?.Message ?? "读失败");
-            } catch (OperationCanceledException) { return CoreOp.Cancelled; }
-            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, OperationErrorCode.ProtocolError); }
+                    ? OperationResult.Ok
+                    : OperationResult.ProtocolError(resp?.Result?.Message ?? "读失败");
+            } catch (OperationCanceledException) { return OperationResult.Cancelled; }
+            catch (Exception ex)                 { return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError); }
         }
 
         public async Task<OperationResult> WriteAsync (string variableId, object value, CancellationToken ct) {
@@ -101,10 +101,10 @@ namespace CommunicationDebuggingTools.Client {
                     new WriteVariableRequest { Id = variableId, Value = raw }, cancellationToken: ct)
                     .ConfigureAwait(false);
                 return resp?.Result?.Ok == true
-                    ? CoreOp.Ok
-                    : CoreOp.ProtocolError(resp?.Result?.Message ?? "写失败");
-            } catch (OperationCanceledException) { return CoreOp.Cancelled; }
-            catch (Exception ex)                 { return CoreOp.Fail(ex.Message, OperationErrorCode.ProtocolError); }
+                    ? OperationResult.Ok
+                    : OperationResult.ProtocolError(resp?.Result?.Message ?? "写失败");
+            } catch (OperationCanceledException) { return OperationResult.Cancelled; }
+            catch (Exception ex)                 { return OperationResult.Fail(ex.Message, OperationErrorCode.ProtocolError); }
         }
 
         public async Task ReadByDeviceAsync (string deviceId, CancellationToken ct) {

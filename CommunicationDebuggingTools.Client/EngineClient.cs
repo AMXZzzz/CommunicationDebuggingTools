@@ -42,7 +42,7 @@ namespace CommunicationDebuggingTools.Client {
             SynchronizationContext uiContext = null) {
 
             if (string.IsNullOrWhiteSpace(address))
-                address = AppSettings.DefaultHostAddress;
+                address = "http://127.0.0.1:5100";
 
             var channel = new EngineHostChannel();
             channel.Open(address);

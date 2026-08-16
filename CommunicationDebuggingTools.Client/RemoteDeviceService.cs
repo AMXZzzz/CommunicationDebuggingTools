@@ -45,8 +45,8 @@ namespace CommunicationDebuggingTools.Client {
         private async Task WatchLoopAsync (CancellationToken ct) {
             try {
                 using var call = _client.WatchDevices(new Empty(), cancellationToken: ct);
-                await foreach (DeviceEvent evt in call.ResponseStream.ReadAllAsync(ct)
-                    .ConfigureAwait(false)) {
+                while (await call.ResponseStream.MoveNext(ct).ConfigureAwait(false)) {
+                    DeviceEvent evt = call.ResponseStream.Current;
                     Post(() => ApplyDeviceEvent(evt));
                 }
             } catch (OperationCanceledException) { }
