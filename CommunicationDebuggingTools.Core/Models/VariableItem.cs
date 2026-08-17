@@ -54,7 +54,6 @@ namespace CommunicationDebuggingTools.Core.Models {
         }
 
         // ── 现有属性（不变）────────────────────────────
-
         public string Id {
             get => _id;
             set { if (_id == value) return; _id = value; Raise(nameof(Id)); }

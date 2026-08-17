@@ -180,9 +180,13 @@
                                                    Foreground="{StaticResource SF.Brush.Text.Primary}"/>
                                         <TextBox Text="{Binding WriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  Width="90" Height="26"
+                                                 Margin="10,0,0,0"
                                                  Visibility="{Binding WriteEditorVisibility}"
-                                                 Style="{StaticResource SF.Style.DialogTextBox}"/>
+                                                 Style="{StaticResource SF.Style.DialogTextBox}"
+                                                 Tag="{Binding Id}"
+                                                 PreviewKeyDown="WriteTextBox_PreviewKeyDown"/>
                                         <Button Content="写入"
+                                                Margin="8,0,0,0"
                                                 Style="{StaticResource SF.Style.VarWriteBtn}"
                                                 Visibility="{Binding WriteEditorVisibility}"
                                                 Tag="{Binding Id}" Click="BtnWrite_Click"/>

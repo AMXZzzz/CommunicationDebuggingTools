@@ -78,6 +78,12 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             }
         }
 
+        private void WriteTextBox_PreviewKeyDown (object sender, System.Windows.Input.KeyEventArgs e) {
+            if (e == null || e.Key != System.Windows.Input.Key.Enter) return;
+            e.Handled = true;
+            BtnWrite_Click(sender, e);
+        }
+
         private void Rebuild () {
             DetachAllRows();
             _rows.Clear();
@@ -154,6 +160,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
             private string _valueText;
             private string _writeText;
             private bool _writeDirty;
+            private bool _writeFocused;
 
             public string Id { get; set; }
             public int Index { get; set; }
@@ -185,6 +192,14 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                     _writeDirty = true;
                     Raise(nameof(WriteText));
                 }
+            }
+
+            public void SetWriteFocused (bool focused) {
+                _writeFocused = focused;
+            }
+
+            public bool IsWriteEditable () {
+                return !_writeFocused && !_writeDirty;
             }
 
             public void ClearWriteDirty () { _writeDirty = false; }
@@ -241,7 +256,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                 Action apply = () => {
                     string text = v.LastValue != null ? v.LastValue.ToString() : "—";
                     ValueText = text;
-                    if (!_writeDirty) {
+                    if (IsWriteEditable()) {
                         _writeText = v.LastValue != null ? v.LastValue.ToString() : "";
                         Raise(nameof(WriteText));
                     }
