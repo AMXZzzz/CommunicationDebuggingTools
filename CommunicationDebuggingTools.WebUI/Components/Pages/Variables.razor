@@ -72,6 +72,7 @@
                     <th>类型</th>
                     <th>读写</th>
                     <th>实时值</th>
+                    <th style="min-width:130px;">写入</th>
                     <th>单位</th>
                     <th>分类</th>
                     <th>操作</th>
@@ -95,19 +96,18 @@
                         <td><span class="type @GetTypeCssClass(v.DataType)">@v.DataType</span></td>
                         <td><span class="rw @GetAccessCssClass(v.Access)">@GetAccessText(v.Access)</span></td>
                         <td>
+                            <!-- 实时值：始终显示，只读变量也看到当前值 -->
                             <span class="live-val @GetLiveValueClass(v)">@GetLiveValueText(v)</span>
                         </td>
                         <td>
-                            @if (v.Access == VariableAccess.ReadOnly) {
-                                <span class="write-disabled">—</span>
-                            } else {
+                            <!-- 写入：独立列，只对可写变量显示编辑器 -->
+                            @if (v.Access != VariableAccess.ReadOnly) {
                                 <div class="write-inline">
-                                    <input class="live-val writeable"
+                                    <input class="write-input"
                                            value="@GetWriteBufferValue(v.Id)"
+                                           placeholder="输入值"
                                            @oninput="args => SetWriteBufferValue(v.Id, args.Value?.ToString())"
-                                           @onkeydown="args => HandleWriteKeyDown(v.Id, args)"
-                                           @onfocus="() => SetWriteBufferFocused(v.Id, true)"
-                                           @onblur="() => OnWriteBufferBlur(v.Id)" />
+                                           @onkeydown="args => HandleWriteKeyDown(v.Id, args)" />
                                     <button class="write-btn" @onclick="() => WriteAsync(v.Id)">写入</button>
                                 </div>
                             }
@@ -221,7 +221,6 @@
     private string? _notice;
     private bool _noticeIsError;
     private readonly Dictionary<string, string> _writeBuffer = new();
-    private readonly HashSet<string> _writeBufferFocused = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _writeBufferDirty = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly (string Key, string Label)[] VariableTabs = [

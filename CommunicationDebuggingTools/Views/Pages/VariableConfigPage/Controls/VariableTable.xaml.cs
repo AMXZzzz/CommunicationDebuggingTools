@@ -232,7 +232,7 @@ namespace CommunicationDebuggingTools.Views.VariableConfigPage.Controls {
                     UnitText = string.IsNullOrWhiteSpace(v.Unit) ? "—" : v.Unit,
                     Category = string.IsNullOrWhiteSpace(v.Category) ? "—" : v.Category,
                     Description = desc,
-                    ValueTextVisibility = canWrite ? Visibility.Collapsed : Visibility.Visible,
+                    ValueTextVisibility = Visibility.Visible,  // 始终显示实时值，写入编辑器独立
                     WriteEditorVisibility = canWrite ? Visibility.Visible : Visibility.Collapsed,
                     DescToolTipVisibility = string.IsNullOrWhiteSpace(desc)
                         ? Visibility.Collapsed : Visibility.Visible

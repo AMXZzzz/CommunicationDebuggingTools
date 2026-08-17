@@ -88,6 +88,7 @@
                             <ColumnDefinition Width="72"/>
                             <ColumnDefinition Width="52"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="130"/>
                             <ColumnDefinition Width="48"/>
                             <ColumnDefinition Width="76"/>
                             <ColumnDefinition Width="64"/>
@@ -98,9 +99,10 @@
                         <TextBlock Grid.Column="3" Text="类型" Style="{StaticResource SF.Style.VarHeaderText}"/>
                         <TextBlock Grid.Column="4" Text="读写" Style="{StaticResource SF.Style.VarHeaderText}"/>
                         <TextBlock Grid.Column="5" Text="实时值" Style="{StaticResource SF.Style.VarHeaderText}"/>
-                        <TextBlock Grid.Column="6" Text="单位" Style="{StaticResource SF.Style.VarHeaderText}"/>
-                        <TextBlock Grid.Column="7" Text="分类" Style="{StaticResource SF.Style.VarHeaderText}"/>
-                        <TextBlock Grid.Column="8" Text="操作" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="6" Text="写入" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="7" Text="单位" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="8" Text="分类" Style="{StaticResource SF.Style.VarHeaderText}"/>
+                        <TextBlock Grid.Column="9" Text="操作" Style="{StaticResource SF.Style.VarHeaderText}"/>
                     </Grid>
                 </Border>
 
@@ -171,39 +173,40 @@
                                                    Style="{StaticResource SF.Style.VarAccessBadgeText}"/>
                                     </Border>
 
-                                    <!-- 实时值 / 写入 -->
-                                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding ValueText}"
-                                                   FontFamily="Consolas" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center"
-                                                   Visibility="{Binding ValueTextVisibility}"
-                                                   Foreground="{StaticResource SF.Brush.Text.Primary}"/>
+                                    <!-- 实时值（始终显示） -->
+                                    <TextBlock Grid.Column="5"
+                                               Text="{Binding ValueText}"
+                                               FontFamily="Consolas" FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource SF.Brush.Text.Primary}"/>
+
+                                    <!-- 写入（独立列，仅可写变量显示） -->
+                                    <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBox Text="{Binding WriteText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  Width="90" Height="26"
-                                                 Margin="10,0,0,0"
                                                  Visibility="{Binding WriteEditorVisibility}"
                                                  Style="{StaticResource SF.Style.DialogTextBox}"
                                                  Tag="{Binding Id}"
                                                  PreviewKeyDown="WriteTextBox_PreviewKeyDown"/>
                                         <Button Content="写入"
-                                                Margin="8,0,0,0"
+                                                Margin="6,0,0,0"
                                                 Style="{StaticResource SF.Style.VarWriteBtn}"
                                                 Visibility="{Binding WriteEditorVisibility}"
                                                 Tag="{Binding Id}" Click="BtnWrite_Click"/>
                                     </StackPanel>
 
-                                    <TextBlock Grid.Column="6" Text="{Binding UnitText}" VerticalAlignment="Center"
+                                    <TextBlock Grid.Column="7" Text="{Binding UnitText}" VerticalAlignment="Center"
                                                Foreground="{StaticResource SF.Brush.Text.Secondary}"/>
 
                                     <!-- 分类徽章 -->
-                                    <Border Grid.Column="7" CornerRadius="3" Padding="6,2"
+                                    <Border Grid.Column="8" CornerRadius="3" Padding="6,2"
                                             HorizontalAlignment="Left" VerticalAlignment="Center"
                                             Background="{StaticResource SF.Brush.Var.Category.Bg}">
                                         <TextBlock Text="{Binding Category}" FontSize="11"
                                                    Foreground="{StaticResource SF.Brush.Var.Category.Fg}"/>
                                     </Border>
 
-                                    <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="9" Orientation="Horizontal" VerticalAlignment="Center">
                                         <Button Content="✎" Style="{StaticResource SF.Style.VarRowIcon}"
                                                 Tag="{Binding Id}" Click="BtnEdit_Click" ToolTip="编辑"/>
                                         <Button Content="×" Style="{StaticResource SF.Style.VarRowIcon}"
