@@ -84,11 +84,11 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="40"/>
                             <ColumnDefinition Width="120"/>
-                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="100"/>
                             <ColumnDefinition Width="72"/>
                             <ColumnDefinition Width="52"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="130"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="150"/>
                             <ColumnDefinition Width="48"/>
                             <ColumnDefinition Width="76"/>
                             <ColumnDefinition Width="64"/>
@@ -135,11 +135,11 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="40"/>
                                         <ColumnDefinition Width="120"/>
-                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="100"/>
                                         <ColumnDefinition Width="72"/>
                                         <ColumnDefinition Width="52"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="150"/>
                                         <ColumnDefinition Width="48"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="64"/>
