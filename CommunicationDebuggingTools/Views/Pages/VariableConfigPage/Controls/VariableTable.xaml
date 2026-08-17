@@ -139,6 +139,7 @@
                                         <ColumnDefinition Width="72"/>
                                         <ColumnDefinition Width="52"/>
                                         <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="130"/>
                                         <ColumnDefinition Width="48"/>
                                         <ColumnDefinition Width="76"/>
                                         <ColumnDefinition Width="64"/>

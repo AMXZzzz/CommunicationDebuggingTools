@@ -46,8 +46,11 @@
                 <div class="dev-meta">@SelectedDeviceMeta</div>
             </div>
             <div class="actions">
-                <button class="t-btn">复制到其他设备</button>
-                <button class="t-btn" @onclick="OpenBatchAddHint">批量添加</button>
+                <button class="t-btn" @onclick="ExportCsvAsync">↓ 导出 CSV</button>
+                <label class="t-btn" style="cursor:pointer;display:inline-flex;align-items:center;">
+                    ↑ 导入 CSV
+                    <InputFile OnChange="ImportCsvAsync" accept=".csv" style="display:none;" />
+                </label>
                 <button class="t-btn primary" @onclick="OpenAddDialog">+ 添加变量</button>
             </div>
         </div>
@@ -221,6 +224,7 @@
     private string? _notice;
     private bool _noticeIsError;
     private readonly Dictionary<string, string> _writeBuffer = new();
+    // _writeBufferDirty: 记录用户手动编辑过的行，状态刷新时不覆盖
     private readonly HashSet<string> _writeBufferDirty = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly (string Key, string Label)[] VariableTabs = [
@@ -387,9 +391,6 @@
         _showHint = !_showHint;
     }
 
-    private void OpenBatchAddHint () {
-        SetNotice("批量添加功能待完善", false);
-    }
 
     private IEnumerable<VariableItem> GetVisibleVariables () {
         IEnumerable<VariableItem> variables = Gateway.Variables;
@@ -461,16 +462,6 @@
         return variable?.DataType == VariableDataType.Bool;
     }
 
-    private async Task ReadAsync (string id) {
-        ClearNotice();
-        try {
-            var result = await Gateway.ReadVariableAsync(id);
-            SetNotice(result.Success ? "读取成功" : result.ErrorMessage, !result.Success);
-            await Gateway.RefreshNowAsync();
-        } catch (Exception ex) {
-            SetError(ex.Message);
-        }
-    }
 
     private async Task WriteAsync (string id) {
         ClearNotice();
@@ -480,7 +471,6 @@
             SetNotice(result.Success ? "写入成功" : result.ErrorMessage, !result.Success);
             if (result.Success) {
                 _writeBufferDirty.Remove(id);
-                _writeBufferFocused.Remove(id);
             }
             await Gateway.RefreshNowAsync();
         } catch (Exception ex) {
@@ -688,44 +678,17 @@
         _writeBufferDirty.Add(id);
     }
 
-    private void SetWriteBufferFocused (string id, bool focused) {
-        if (string.IsNullOrWhiteSpace(id)) {
-            return;
-        }
 
-        if (focused) {
-            _writeBufferFocused.Add(id);
-            return;
-        }
-
-        _writeBufferFocused.Remove(id);
-        if (!_writeBufferDirty.Contains(id)) {
-            var value = Gateway.Variables.FirstOrDefault(v => v.Id == id)?.LastValue?.ToString() ?? string.Empty;
-            _writeBuffer[id] = value;
-        }
-    }
-
-    private void OnWriteBufferBlur (string id) {
-        SetWriteBufferFocused(id, false);
-    }
 
     private void SyncWriteBuffer () {
+        // 刷新缓冲区：跳过用户已手动编辑的行，其余同步最新实时值
         foreach (var item in Gateway.Variables) {
-            if (item == null || string.IsNullOrWhiteSpace(item.Id)) {
-                continue;
-            }
-
-            if (_writeBufferFocused.Contains(item.Id) || _writeBufferDirty.Contains(item.Id)) {
-                continue;
-            }
-
+            if (item == null || string.IsNullOrWhiteSpace(item.Id)) continue;
+            if (_writeBufferDirty.Contains(item.Id)) continue;
             _writeBuffer[item.Id] = item.LastValue?.ToString() ?? string.Empty;
         }
     }
 
-    private string GetDeviceName (string deviceId) {
-        return Gateway.Devices.FirstOrDefault(d => d.Id == deviceId)?.Name ?? deviceId;
-    }
 
     private void EnsureSelectedDevice () {
         if (!string.IsNullOrWhiteSpace(_selectedDeviceId) && Gateway.Devices.Any(d => string.Equals(d.Id, _selectedDeviceId, StringComparison.OrdinalIgnoreCase))) {
