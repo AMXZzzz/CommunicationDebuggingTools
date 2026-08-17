@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,7 +54,7 @@ namespace CommunicationDebuggingTools.Client {
         private void ApplyEvent (VariableValueEvent evt) {
             VariableItem v = Variables.FirstOrDefault(x => x.Id == evt.VariableId);
             if (v == null) return;
-            v.LastValue = string.IsNullOrEmpty(evt.LastValue) ? null : (object)evt.LastValue;
+            v.LastValue = ParseValue(v, evt.LastValue);
             v.LastError = evt.LastError ?? "";
             if (Enum.TryParse(evt.Quality, true, out DataQuality q)) v.Quality = q;
         }
@@ -144,12 +145,12 @@ namespace CommunicationDebuggingTools.Client {
             if (Enum.TryParse(dto.DataType, true, out VariableDataType dt)) v.DataType = dt;
             if (Enum.TryParse(dto.Access,   true, out VariableAccess   ac)) v.Access   = ac;
             if (Enum.TryParse(dto.Quality,  true, out DataQuality       q))  v.Quality  = q;
-            v.LastValue = string.IsNullOrEmpty(dto.LastValue) ? null : (object)dto.LastValue;
+            v.LastValue = ParseValue(v, dto.LastValue);
             return v;
         }
 
         private static void MergeValue (VariableItem v, VariableDto dto) {
-            v.LastValue = string.IsNullOrEmpty(dto.LastValue) ? null : (object)dto.LastValue;
+            v.LastValue = ParseValue(v, dto.LastValue);
             v.LastError = dto.LastError ?? "";
             if (Enum.TryParse(dto.Quality, true, out DataQuality q)) v.Quality = q;
         }
@@ -161,6 +162,51 @@ namespace CommunicationDebuggingTools.Client {
                 Access = v.Access.ToString(), Length = v.Length,
                 Unit = v.Unit ?? "", Category = v.Category ?? "", Description = v.Description ?? ""
             };
+
+        private static object? ParseValue (VariableItem variable, string rawValue) {
+            if (string.IsNullOrWhiteSpace(rawValue)) {
+                return null;
+            }
+
+            string text = rawValue.Trim();
+            if (variable == null) {
+                return text;
+            }
+
+            switch (variable.DataType) {
+                case VariableDataType.Bool:
+                    if (bool.TryParse(text, out bool b)) return b;
+                    if (text == "1" || text.Equals("on", StringComparison.OrdinalIgnoreCase) || text.Equals("yes", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (text == "0" || text.Equals("off", StringComparison.OrdinalIgnoreCase) || text.Equals("no", StringComparison.OrdinalIgnoreCase)) return false;
+                    return text;
+                case VariableDataType.Int16:
+                    if (short.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out short i16)) return i16;
+                    return text;
+                case VariableDataType.UInt16:
+                    if (ushort.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort u16)) return u16;
+                    return text;
+                case VariableDataType.Int32:
+                    if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i32)) return i32;
+                    return text;
+                case VariableDataType.UInt32:
+                    if (uint.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint u32)) return u32;
+                    return text;
+                case VariableDataType.Int64:
+                    if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long i64)) return i64;
+                    return text;
+                case VariableDataType.UInt64:
+                    if (ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out ulong u64)) return u64;
+                    return text;
+                case VariableDataType.Float:
+                    if (float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float f)) return f;
+                    return text;
+                case VariableDataType.Double:
+                    if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double d)) return d;
+                    return text;
+                default:
+                    return text;
+            }
+        }
 
         public void Dispose () {
             _watchCts?.Cancel();

@@ -173,15 +173,15 @@
         Gateway.ProtocolNames.Count > 0 ? Gateway.ProtocolNames : DefaultProtocolOptions;
 
     private DeviceEditor _editor = new();
-    private string _editingId;
-    private string _notice;
+    private string? _editingId;
+    private string? _notice;
     private bool _noticeIsError;
     private bool _isSelectMode;
     private readonly HashSet<string> _selectedIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _showEditDialog;
     private bool _showDeleteConfirm;
     private bool _deleteIsBatch;
-    private string _deleteId;
+    private string? _deleteId;
     private string _deleteMessage = string.Empty;
 
     private int OnlineDeviceCount => Gateway.Devices.Count(d => d.IsConnected);
@@ -271,7 +271,7 @@
         public string Ip { get; set; } = "127.0.0.1";
         public int Port { get; set; } = 502;
         public int StationNo { get; set; } = 1;
-        public CommunicationDebuggingTools.Core.Models.DeviceInfo ToEntity(string id) => new() {
+        public CommunicationDebuggingTools.Core.Models.DeviceInfo ToEntity(string? id) => new() {
             Id = id ?? Guid.NewGuid().ToString("N"), Name = Name?.Trim() ?? "",
             Protocol = Protocol?.Trim() ?? "", Model = Model?.Trim() ?? "",
             Ip = Ip?.Trim() ?? "", Port = Port, StationNo = StationNo, ExtraSettingsJson = "{}"

@@ -7,7 +7,7 @@ namespace CommunicationDebuggingTools.Core.Models {
     /// Address 为不透明字符串，仅由对应协议插件解析。
     /// </summary>
     public class VariableItem : INotifyPropertyChanged {
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         private string _id;
         private string _deviceId;
@@ -24,7 +24,7 @@ namespace CommunicationDebuggingTools.Core.Models {
         private string _description;
 
         // ── 新增：轮询控制 ──────────────────────────────
-        private int  _scanRateMs      = 1000;
+        private int  _scanRateMs      = AppConfig.HeartbeatIntervalSeconds;
         private bool _isPollingEnabled = true;
 
         /// <summary>
@@ -129,7 +129,7 @@ namespace CommunicationDebuggingTools.Core.Models {
             _access = VariableAccess.ReadWrite;
             _length = 0;
             _unit = "";
-            _category = "状态点";
+            _category = "监控数据";
             _description = "";
             _lastError = "";
             _quality = DataQuality.Bad;

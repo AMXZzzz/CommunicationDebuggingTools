@@ -15,11 +15,11 @@ namespace CommunicationDebuggingTools.WebUI.Services;
 public sealed class EngineGateway : IDisposable {
     private readonly SemaphoreSlim _sync = new(1, 1);
     private readonly List<string> _logs = new();
-    private CancellationTokenSource _loopCts;
-    private EngineClient _client;
+    private CancellationTokenSource? _loopCts;
+    private EngineClient? _client;
 
     /// <summary>连接状态变更事件。</summary>
-    public event Action StateChanged;
+    public event Action? StateChanged;
 
     /// <summary>当前 EngineHost 地址。</summary>
     public string HostAddress { get; private set; } = "http://127.0.0.1:5100";
@@ -80,7 +80,8 @@ public sealed class EngineGateway : IDisposable {
         ArgumentNullException.ThrowIfNull(device);
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Devices.Add(device);
+            var client = EnsureClient();
+            client.Devices.Add(device);
             AddLog("设备", "新增: " + device.Name);
         } finally {
             _sync.Release();
@@ -95,7 +96,8 @@ public sealed class EngineGateway : IDisposable {
         ArgumentNullException.ThrowIfNull(device);
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Devices.Update(device);
+            var client = EnsureClient();
+            client.Devices.Update(device);
             AddLog("设备", "更新: " + device.Name);
         } finally {
             _sync.Release();
@@ -110,7 +112,8 @@ public sealed class EngineGateway : IDisposable {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("设备 Id 不能为空", nameof(id));
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Devices.Remove(id);
+            var client = EnsureClient();
+            client.Devices.Remove(id);
             AddLog("设备", "删除: " + id);
         } finally {
             _sync.Release();
@@ -125,7 +128,8 @@ public sealed class EngineGateway : IDisposable {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("设备 Id 不能为空", nameof(id));
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            bool ok = await _client.Devices.ConnectAsync(id, cancellationToken).ConfigureAwait(false);
+            var client = EnsureClient();
+            bool ok = await client.Devices.ConnectAsync(id, cancellationToken).ConfigureAwait(false);
             AddLog("连接", (ok ? "连接成功: " : "连接失败: ") + id);
             return ok;
         } finally {
@@ -140,7 +144,8 @@ public sealed class EngineGateway : IDisposable {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("设备 Id 不能为空", nameof(id));
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Devices.Disconnect(id);
+            var client = EnsureClient();
+            client.Devices.Disconnect(id);
             AddLog("连接", "断开: " + id);
         } finally {
             _sync.Release();
@@ -176,7 +181,8 @@ public sealed class EngineGateway : IDisposable {
         ArgumentNullException.ThrowIfNull(item);
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Variables.Add(item);
+            var client = EnsureClient();
+            client.Variables.Add(item);
             AddLog("变量", "新增: " + item.Name);
         } finally {
             _sync.Release();
@@ -191,7 +197,8 @@ public sealed class EngineGateway : IDisposable {
         ArgumentNullException.ThrowIfNull(item);
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Variables.Update(item);
+            var client = EnsureClient();
+            client.Variables.Update(item);
             AddLog("变量", "更新: " + item.Name);
         } finally {
             _sync.Release();
@@ -206,7 +213,8 @@ public sealed class EngineGateway : IDisposable {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("变量 Id 不能为空", nameof(id));
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            _client.Variables.Remove(id);
+            var client = EnsureClient();
+            client.Variables.Remove(id);
             AddLog("变量", "删除: " + id);
         } finally {
             _sync.Release();
@@ -221,7 +229,8 @@ public sealed class EngineGateway : IDisposable {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("变量 Id 不能为空", nameof(id));
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            var result = await _client.Variables.ReadAsync(id, cancellationToken).ConfigureAwait(false);
+            var client = EnsureClient();
+            var result = await client.Variables.ReadAsync(id, cancellationToken).ConfigureAwait(false);
             AddLog("变量", (result.Success ? "读取成功: " : "读取失败: ") + id);
             return result;
         } finally {
@@ -236,7 +245,8 @@ public sealed class EngineGateway : IDisposable {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("变量 Id 不能为空", nameof(id));
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            var result = await _client.Variables.WriteAsync(id, value, cancellationToken).ConfigureAwait(false);
+            var client = EnsureClient();
+            var result = await client.Variables.WriteAsync(id, value, cancellationToken).ConfigureAwait(false);
             AddLog("变量", (result.Success ? "写入成功: " : "写入失败: ") + id);
             return result;
         } finally {
@@ -250,17 +260,18 @@ public sealed class EngineGateway : IDisposable {
     public async Task RefreshNowAsync (CancellationToken cancellationToken = default) {
         await _sync.WaitAsync(cancellationToken).ConfigureAwait(false);
         try {
-            if (_client == null) return;
+            var client = _client;
+            if (client == null) return;
 
-            bool connected = await _client.PingAsync(cancellationToken).ConfigureAwait(false);
+            bool connected = await client.PingAsync(cancellationToken).ConfigureAwait(false);
             IsConnected = connected;
             if (connected) {
-                _client.Devices.Load();
-                _client.Variables.Load();
-                Devices = _client.Devices.Devices.Select(CloneDevice).ToList();
-                Variables = _client.Variables.Variables.Select(CloneVariable).ToList();
+                client.Devices.Load();
+                client.Variables.Load();
+                Devices = client.Devices.Devices.Select(CloneDevice).ToList();
+                Variables = client.Variables.Variables.Select(CloneVariable).ToList();
                 try {
-                    ProtocolNames = await _client.ListProtocolsAsync(cancellationToken).ConfigureAwait(false);
+                    ProtocolNames = await client.ListProtocolsAsync(cancellationToken).ConfigureAwait(false);
                 } catch (Exception ex) {
                     ProtocolNames = Array.Empty<string>();
                     AddLog("连接", "获取协议列表失败: " + ex.Message);
@@ -289,6 +300,10 @@ public sealed class EngineGateway : IDisposable {
         _loopCts?.Dispose();
         _sync.Dispose();
         _client?.Dispose();
+    }
+
+    private EngineClient EnsureClient () {
+        return _client ?? throw new InvalidOperationException("请先初始化连接");
     }
 
     private async Task SyncLoopAsync (CancellationToken cancellationToken) {

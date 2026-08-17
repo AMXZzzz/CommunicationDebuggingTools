@@ -101,7 +101,9 @@
                                 <div class="write-inline">
                                     <input class="live-val writeable"
                                            value="@GetWriteBufferValue(v.Id)"
-                                           @oninput="args => SetWriteBufferValue(v.Id, args.Value?.ToString())" />
+                                           @oninput="args => SetWriteBufferValue(v.Id, args.Value?.ToString())"
+                                           @onfocus="() => SetWriteBufferFocused(v.Id, true)"
+                                           @onblur="() => OnWriteBufferBlur(v.Id)" />
                                     <button class="write-btn" @onclick="() => WriteAsync(v.Id)">写入</button>
                                 </div>
                             }
@@ -168,6 +170,14 @@
                     </select>
                 </div>
                 <div class="field">
+                    <label>变量类型</label>
+                    <select @bind="_editor.Category">
+                        @foreach (var type in VariableTypeOptions) {
+                            <option value="@type">@type</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
                     <label>访问权限</label>
                     <select @bind="_editor.Access">
                         @foreach (var ac in Enum.GetValues<VariableAccess>()) {
@@ -203,10 +213,11 @@
 
 @code {
     private VariableEditor _editor = new();
-    private string _editingId;
-    private string _notice;
+    private string? _editingId;
+    private string? _notice;
     private bool _noticeIsError;
     private readonly Dictionary<string, string> _writeBuffer = new();
+    private readonly HashSet<string> _writeBufferFocused = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly (string Key, string Label)[] VariableTabs = [
         ("all", "全部"),
@@ -216,14 +227,19 @@
         ("data", "监控数据")
     ];
 
+    private static readonly string[] VariableTypeOptions = [
+        "状态点",
+        "监控数据"
+    ];
+
     private bool _isSelectMode;
     private readonly HashSet<string> _selectedIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _showEditDialog;
     private bool _showDeleteConfirm;
     private bool _deleteIsBatch;
-    private string _deleteId;
+    private string? _deleteId;
     private string _deleteMessage = string.Empty;
-    private string _selectedDeviceId;
+    private string? _selectedDeviceId;
     private string _activeTab = "all";
     private bool _showHint = true;
 
@@ -380,8 +396,8 @@
         return _activeTab switch {
             "readonly" => variables.Where(v => v.Access == VariableAccess.ReadOnly),
             "writeonly" => variables.Where(v => v.Access == VariableAccess.WriteOnly),
-            "status" => variables.Where(IsStatusVariable),
-            "data" => variables.Where(v => !IsStatusVariable(v)),
+            "status" => variables.Where(IsStatusPointVariable),
+            "data" => variables.Where(v => !IsStatusPointVariable(v)),
             _ => variables
         };
     }
@@ -395,8 +411,8 @@
         return key switch {
             "readonly" => variables.Count(v => v.Access == VariableAccess.ReadOnly),
             "writeonly" => variables.Count(v => v.Access == VariableAccess.WriteOnly),
-            "status" => variables.Count(IsStatusVariable),
-            "data" => variables.Count(v => !IsStatusVariable(v)),
+            "status" => variables.Count(IsStatusPointVariable),
+            "data" => variables.Count(v => !IsStatusPointVariable(v)),
             _ => variables.Count()
         };
     }
@@ -426,7 +442,7 @@
         }
     }
 
-    private CommunicationDebuggingTools.Core.Models.DeviceInfo GetSelectedDevice () {
+    private CommunicationDebuggingTools.Core.Models.DeviceInfo? GetSelectedDevice () {
         if (!string.IsNullOrWhiteSpace(_selectedDeviceId)) {
             var selected = Gateway.Devices.FirstOrDefault(d => string.Equals(d.Id, _selectedDeviceId, StringComparison.OrdinalIgnoreCase));
             if (selected != null) {
@@ -437,12 +453,8 @@
         return Gateway.Devices.FirstOrDefault();
     }
 
-    private static bool IsStatusVariable (VariableItem variable) {
-        if (variable == null) {
-            return false;
-        }
-
-        return !string.IsNullOrWhiteSpace(variable.Category) && variable.Category.Contains("状态", StringComparison.OrdinalIgnoreCase);
+    private static bool IsStatusPointVariable (VariableItem variable) {
+        return variable?.DataType == VariableDataType.Bool;
     }
 
     private async Task ReadAsync (string id) {
@@ -548,16 +560,17 @@
                         continue;
                     }
 
+                    var dataType = ParseEnum(GetCol(cols, index, "DataType"), VariableDataType.Int16);
                     var item = new VariableItem {
                         Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString("N") : id,
                         DeviceId = deviceId,
                         Name = name,
                         Address = address,
-                        DataType = ParseEnum(GetCol(cols, index, "DataType"), VariableDataType.Int16),
+                        DataType = dataType,
                         Access = ParseEnum(GetCol(cols, index, "Access"), VariableAccess.ReadWrite),
                         Length = ParseInt(GetCol(cols, index, "Length"), 0),
                         Unit = GetCol(cols, index, "Unit"),
-                        Category = GetCol(cols, index, "Category"),
+                        Category = NormalizeVariableType(GetCol(cols, index, "Category"), dataType),
                         Description = GetCol(cols, index, "Description"),
                         ScanRateMs = ParseInt(GetCol(cols, index, "ScanRateMs"), 1000),
                         IsPollingEnabled = ParseBool(GetCol(cols, index, "IsPollingEnabled"), true)
@@ -648,12 +661,29 @@
         return _writeBuffer.TryGetValue(id, out var value) ? value : string.Empty;
     }
 
-    private void SetWriteBufferValue (string id, string value) {
+    private void SetWriteBufferValue (string id, string? value) {
         if (string.IsNullOrWhiteSpace(id)) {
             return;
         }
 
         _writeBuffer[id] = value ?? string.Empty;
+    }
+
+    private void SetWriteBufferFocused (string id, bool focused) {
+        if (string.IsNullOrWhiteSpace(id)) {
+            return;
+        }
+
+        if (focused) {
+            _writeBufferFocused.Add(id);
+        } else {
+            _writeBufferFocused.Remove(id);
+        }
+    }
+
+    private void OnWriteBufferBlur (string id) {
+        SetWriteBufferFocused(id, false);
+        SyncWriteBuffer();
     }
 
     private void SyncWriteBuffer () {
@@ -662,9 +692,11 @@
                 continue;
             }
 
-            if (!_writeBuffer.ContainsKey(item.Id)) {
-                _writeBuffer[item.Id] = item.LastValue?.ToString() ?? string.Empty;
+            if (_writeBufferFocused.Contains(item.Id)) {
+                continue;
             }
+
+            _writeBuffer[item.Id] = item.LastValue?.ToString() ?? string.Empty;
         }
     }
 
@@ -710,20 +742,45 @@
         };
     }
 
-    private static string GetCategoryText (VariableItem variable) {
-        if (!string.IsNullOrWhiteSpace(variable?.Category)) {
-            return variable.Category;
+    private static string NormalizeVariableType (string variableType, VariableDataType dataType) {
+        if (dataType == VariableDataType.Bool) {
+            return "状态点";
         }
 
-        return IsStatusVariable(variable) ? "状态点" : "监控数据";
+        if (string.IsNullOrWhiteSpace(variableType) || string.Equals(variableType, "状态点", StringComparison.OrdinalIgnoreCase)) {
+            return "监控数据";
+        }
+
+        return variableType.Trim();
+    }
+
+    private static string GetCategoryText (VariableItem variable) {
+        if (variable == null) {
+            return "监控数据";
+        }
+
+        if (IsStatusPointVariable(variable)) {
+            return "状态点";
+        }
+
+        if (string.IsNullOrWhiteSpace(variable.Category) || string.Equals(variable.Category, "状态点", StringComparison.OrdinalIgnoreCase)) {
+            return "监控数据";
+        }
+
+        return variable.Category;
     }
 
     private static string GetCategoryCssClass (VariableItem variable) {
-        if (IsStatusVariable(variable)) {
+        if (IsStatusPointVariable(variable)) {
             return "status";
         }
 
-        return string.IsNullOrWhiteSpace(variable?.Category) ? "data" : "data";
+        string category = variable?.Category ?? string.Empty;
+        if (category.Contains("宽度", StringComparison.OrdinalIgnoreCase)) {
+            return "width";
+        }
+
+        return "data";
     }
 
     private static string GetUnitText (VariableItem variable) {
@@ -761,16 +818,18 @@
         public string Name { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
         public VariableDataType DataType { get; set; } = VariableDataType.Int16;
+        public string Category { get; set; } = "监控数据";
         public VariableAccess Access { get; set; } = VariableAccess.ReadWrite;
         public int Length { get; set; }
 
-        public VariableItem ToEntity (string id) {
+        public VariableItem ToEntity (string? id) {
             return new VariableItem {
                 Id = id ?? Guid.NewGuid().ToString("N"),
                 DeviceId = DeviceId,
                 Name = Name?.Trim() ?? string.Empty,
                 Address = Address?.Trim() ?? string.Empty,
                 DataType = DataType,
+                Category = NormalizeVariableType(Category, DataType),
                 Access = Access,
                 Length = Length
             };
@@ -782,6 +841,7 @@
                 Name = v.Name,
                 Address = v.Address,
                 DataType = v.DataType,
+                Category = NormalizeVariableType(v.Category, v.DataType),
                 Access = v.Access,
                 Length = v.Length
             };
